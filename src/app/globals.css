@@ -36,6 +36,28 @@ button {
   cursor: pointer;
 }
 
+.input-style {
+  width: 100%;
+  border: 1px solid #e5ebe6;
+  border-radius: 0.75rem;
+  background: white;
+  padding: 0.7rem 0.8rem;
+  color: #173a37;
+  font-size: 0.75rem;
+  font-weight: 400;
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.input-style::placeholder {
+  color: #a8b3af;
+}
+
+.input-style:focus {
+  border-color: #9acb82;
+  box-shadow: 0 0 0 4px rgb(163 230 53 / 10%);
+}
+
 ::selection {
   background: #cdeca8;
   color: #173a37;
