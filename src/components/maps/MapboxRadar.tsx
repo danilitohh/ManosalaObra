@@ -57,6 +57,11 @@ function coordinateForRequest(request: ServiceRequest, index: number) {
   };
 }
 
+function staticMapUrl(token: string) {
+  const center = `${MEDELLIN_CENTER.longitude},${MEDELLIN_CENTER.latitude},11.35,0`;
+  return `https://api.mapbox.com/styles/v1/mapbox/light-v11/static/${center}/800x450?access_token=${encodeURIComponent(token)}`;
+}
+
 export function MapboxRadar({ requests }: MapboxRadarProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -96,18 +101,34 @@ export function MapboxRadar({ requests }: MapboxRadarProps) {
   useEffect(() => {
     if (!token || !mapContainerRef.current) return;
 
-    const map = new mapboxgl.Map({
-      accessToken: token,
-      center: [MEDELLIN_CENTER.longitude, MEDELLIN_CENTER.latitude],
-      container: mapContainerRef.current,
-      cooperativeGestures: true,
-      dragRotate: false,
-      minZoom: 10,
-      style: "mapbox://styles/mapbox/light-v11",
-      zoom: 11.35,
-    });
+    if (!mapboxgl.supported()) {
+      return;
+    }
+
+    let map: mapboxgl.Map;
+
+    try {
+      map = new mapboxgl.Map({
+        accessToken: token,
+        center: [MEDELLIN_CENTER.longitude, MEDELLIN_CENTER.latitude],
+        container: mapContainerRef.current,
+        cooperativeGestures: true,
+        dragRotate: false,
+        minZoom: 10,
+        style: "mapbox://styles/mapbox/light-v11",
+        zoom: 11.35,
+      });
+    } catch {
+      mapContainerRef.current.classList.add("hidden");
+      return;
+    }
 
     mapRef.current = map;
+    map.on("error", (event) => {
+      if (event.error?.message.includes("WebGL")) {
+        map.getContainer().classList.add("hidden");
+      }
+    });
     map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
     map.addControl(
       new mapboxgl.GeolocateControl({
@@ -167,6 +188,13 @@ export function MapboxRadar({ requests }: MapboxRadarProps) {
 
   return (
     <section className="relative min-h-[300px] overflow-hidden rounded-2xl border border-[#dce3ef] bg-[#e8edf6] shadow-[0_10px_28px_rgba(40,52,68,0.06)]" aria-label="Radar de solicitudes cercanas">
+      {/* Mapbox GL JS is used when WebGL is available; the static image keeps the radar visible in embedded browsers without WebGL. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={staticMapUrl(token)}
+        alt="Mapa de Medellín con el radio de servicio aproximado"
+        className="absolute inset-0 h-full w-full object-cover"
+      />
       <div ref={mapContainerRef} className="absolute inset-0" />
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-4">
         <div className="rounded-full border border-white/70 bg-white/90 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#4d69d8] shadow-sm backdrop-blur-sm">
@@ -182,6 +210,9 @@ export function MapboxRadar({ requests }: MapboxRadarProps) {
           {requests.length} solicitudes disponibles
         </div>
         <p className="mt-1 text-[10px] text-[#778592]">La dirección exacta se revela al asignar.</p>
+      </div>
+      <div className="pointer-events-none absolute bottom-2 right-2 rounded bg-white/80 px-1.5 py-0.5 text-[8px] text-[#657482] shadow-sm">
+        © Mapbox · © OpenStreetMap
       </div>
     </section>
   );
