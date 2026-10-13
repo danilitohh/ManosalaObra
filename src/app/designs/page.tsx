@@ -4,89 +4,82 @@ import {
   Check,
   ChevronRight,
   Clock3,
-  LayoutDashboard,
+  Layers3,
   MapPin,
+  Navigation,
   ShieldCheck,
   Sparkles,
-  Wallet,
+  UsersRound,
   Wrench,
   Zap,
 } from "lucide-react";
 
-const designs = [
+const concepts = [
   {
-    id: "confianza",
     number: "01",
-    name: "Confianza local",
-    label: "Recomendado",
-    description: "Una experiencia cálida y ordenada que transmite seguridad desde el primer vistazo.",
-    ideal: "Marketplace general · clientes y técnicos",
-    strengths: ["Se siente confiable", "Escala bien a panel administrativo", "Jerarquía clara para pagos y estados"],
-    tradeoff: "Más sobrio y menos agresivo para captar técnicos rápidamente.",
-    colors: ["#173a37", "#a3e635", "#f7f9f7", "#dcefd8"],
+    name: "Editorial premium",
+    label: "Más sofisticado",
+    description: "Una plataforma con carácter de estudio: menos dashboard, más selección curada y sensación de servicio de calidad.",
+    ideal: "Posicionamiento premium · trabajos de mayor valor",
+    strengths: ["Se diferencia de una app genérica", "Eleva la percepción del técnico", "Usa mejor historias y reputación"],
+    tradeoff: "Requiere cuidar mucho fotografía, copy y consistencia editorial.",
+    colors: ["#f2eee7", "#33202a", "#3558e8", "#d8c8b6"],
+    kind: "editorial" as const,
   },
   {
-    id: "radar",
     number: "02",
-    name: "Radar urbano",
-    label: "Velocidad",
-    description: "Una interfaz con más energía visual para técnicos que necesitan detectar oportunidades y responder rápido.",
-    ideal: "Técnicos en movimiento · alta frecuencia de ofertas",
-    strengths: ["Prioriza solicitudes nuevas", "Sensación de tiempo real", "Acciones primarias muy visibles"],
-    tradeoff: "Puede sentirse más intensa para clientes que buscan tranquilidad.",
-    colors: ["#151719", "#ffbd59", "#25292c", "#d8f26b"],
+    name: "Control eléctrico",
+    label: "Más tecnológico",
+    description: "Una interfaz de operación rápida, con alto contraste y jerarquía de datos para responder sin perder tiempo.",
+    ideal: "Técnicos activos · volumen alto de solicitudes",
+    strengths: ["Acciones muy rápidas", "Excelente para radar y notificaciones", "Se siente moderna y escalable"],
+    tradeoff: "Puede ser demasiado intensa para clientes que buscan una experiencia tranquila.",
+    colors: ["#0d1938", "#536bff", "#c7ff54", "#eef3ff"],
+    kind: "electric" as const,
   },
   {
-    id: "cercania",
     number: "03",
-    name: "Cercanía humana",
-    label: "Cliente primero",
-    description: "Una experiencia más amable y editorial para explicar el servicio, comparar técnicos y reducir ansiedad.",
-    ideal: "Clientes nuevos · servicios para el hogar",
-    strengths: ["Muy fácil de entender", "Reduce fricción en la publicación", "Refuerza el acompañamiento"],
-    tradeoff: "Necesita más trabajo visual para el radar profesional del técnico.",
-    colors: ["#3b4754", "#ed8c6d", "#fbf7f0", "#dce9f0"],
+    name: "Barrio y comunidad",
+    label: "Más cercano",
+    description: "Una experiencia humana que pone rostros, recomendaciones y conversaciones al frente del servicio.",
+    ideal: "Hogares · primera vez usando la plataforma",
+    strengths: ["Reduce la sensación de riesgo", "Hace visibles las recomendaciones", "Invita a volver y recomendar"],
+    tradeoff: "La operación profesional queda en segundo plano y necesita otra vista para técnicos.",
+    colors: ["#fff0e9", "#df7655", "#20354d", "#f6c5ad"],
+    kind: "community" as const,
+  },
+  {
+    number: "04",
+    name: "Mapa primero",
+    label: "Más operativo",
+    description: "La geografía es el centro: solicitudes, distancia y disponibilidad se entienden de un vistazo.",
+    ideal: "Servicios urgentes · cobertura por zonas",
+    strengths: ["Aprovecha el diferencial geográfico", "Perfecto para disponibilidad en tiempo real", "Facilita escalar por barrios"],
+    tradeoff: "Hay que diseñar muy bien la privacidad de la dirección exacta.",
+    colors: ["#27323b", "#f4b64f", "#a7dfc4", "#e9f0ed"],
+    kind: "map" as const,
   },
 ];
 
 export default function DesignExplorationPage() {
-  return (
-    <main className="min-h-screen bg-[#f5f7f4] px-5 py-8 text-[#173a37] md:px-8 md:py-12 xl:px-14">
-      <div className="mx-auto max-w-[1440px]">
-        <header className="flex flex-col justify-between gap-6 border-b border-[#dfe8e0] pb-8 md:flex-row md:items-end">
-          <div>
-            <Link href="/" className="inline-flex items-center gap-2 text-xs font-semibold text-[#4d9c5a] transition hover:text-[#173a37]"><ChevronRight size={14} className="rotate-180" />Volver al MVP</Link>
-            <p className="mt-8 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#72917e]">Laboratorio de producto · Manos a la obra</p>
-            <h1 className="mt-3 max-w-[760px] text-4xl font-semibold tracking-[-0.065em] text-[#173a37] md:text-6xl">Tres formas de hacer que pedir ayuda se sienta fácil.</h1>
-            <p className="mt-5 max-w-[670px] text-sm leading-6 text-[#73827b] md:text-base">Antes de ampliar funcionalidades, definamos la personalidad visual. Estas tres rutas conservan el mismo producto, pero cambian el énfasis de la experiencia.</p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2 rounded-2xl border border-[#dce8dc] bg-white px-4 py-3 text-xs font-semibold text-[#587361] shadow-sm"><Sparkles size={16} className="text-[#76a459]" />Exploración visual v1</div>
-        </header>
-
-        <section className="mt-8 grid gap-5 lg:grid-cols-3">
-          <div className="rounded-2xl border border-[#dce8dc] bg-white p-5 shadow-[0_10px_30px_rgba(39,65,60,0.04)]"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#eef7e9] text-[#4d9c5a]"><ShieldCheck size={19} /></div><h2 className="mt-4 text-base font-semibold">Confianza</h2><p className="mt-2 text-xs leading-5 text-[#83918b]">El usuario debe saber quién responde, cuánto cuesta y cuándo se revela la dirección.</p></div>
-          <div className="rounded-2xl border border-[#dce8dc] bg-white p-5 shadow-[0_10px_30px_rgba(39,65,60,0.04)]"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#fff5dc] text-[#bb842b]"><Zap size={19} /></div><h2 className="mt-4 text-base font-semibold">Velocidad</h2><p className="mt-2 text-xs leading-5 text-[#83918b]">El técnico debe encontrar una solicitud adecuada y enviar una propuesta sin fricción.</p></div>
-          <div className="rounded-2xl border border-[#dce8dc] bg-white p-5 shadow-[0_10px_30px_rgba(39,65,60,0.04)]"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#eef3fb] text-[#5682b3]"><LayoutDashboard size={19} /></div><h2 className="mt-4 text-base font-semibold">Claridad</h2><p className="mt-2 text-xs leading-5 text-[#83918b]">La persona debe entender el estado del servicio sin conocer términos técnicos del marketplace.</p></div>
-        </section>
-
-        <div className="mt-10 grid gap-6 xl:grid-cols-3">
-          {designs.map((design) => <DesignCard key={design.id} {...design} />)}
-        </div>
-
-        <section className="mt-10 flex flex-col justify-between gap-5 rounded-3xl bg-[#173a37] p-6 text-white md:flex-row md:items-center md:p-8">
-          <div><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#a3e635]">Siguiente decisión</p><h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em]">Mi recomendación: comenzar con “Confianza local”.</h2><p className="mt-2 max-w-[710px] text-sm leading-6 text-[#b6cac4]">Es la base más equilibrada para el MVP: permite crecer hacia un radar rápido sin perder claridad en pagos, seguridad y estados del servicio.</p></div><Link href="/" className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#a3e635] px-5 py-3 text-xs font-bold text-[#18312f] transition hover:bg-[#b4ee4f]">Ver diseño actual <ArrowRight size={15} /></Link>
-        </section>
-      </div>
-    </main>
-  );
+  return <main className="min-h-screen bg-[#f8f8f6] px-5 py-8 text-[#202d32] md:px-8 md:py-12 xl:px-14"><div className="mx-auto max-w-[1460px]"><header className="flex flex-col justify-between gap-8 border-b border-[#e3e5e1] pb-9 md:flex-row md:items-end"><div><Link href="/" className="inline-flex items-center gap-2 text-xs font-semibold text-[#6678d9] transition hover:text-[#202d32]"><ChevronRight size={14} className="rotate-180" />Volver al MVP</Link><p className="mt-8 text-[11px] font-semibold uppercase tracking-[0.24em] text-[#89928d]">Nueva exploración visual · ronda 02</p><h1 className="mt-3 max-w-[850px] text-4xl font-semibold tracking-[-0.07em] text-[#202d32] md:text-6xl">Cuatro caminos con más personalidad.</h1><p className="mt-5 max-w-[700px] text-sm leading-6 text-[#77827d] md:text-base">Descartamos el dashboard verde anterior y probamos direcciones más marcadas. La funcionalidad es la misma; cambia la forma en que la marca se siente.</p></div><div className="flex shrink-0 items-center gap-2 rounded-2xl border border-[#e3e5e1] bg-white px-4 py-3 text-xs font-semibold text-[#65716c] shadow-sm"><Layers3 size={16} className="text-[#6678d9]" />4 conceptos para comparar</div></header><section className="mt-8 grid gap-3 md:grid-cols-4"><Criterion icon={Sparkles} title="Personalidad" text="Que no parezca una app más." /><Criterion icon={ShieldCheck} title="Seguridad" text="Que la gente confíe en el contacto." /><Criterion icon={Zap} title="Acción" text="Que ofertar sea inmediato." /><Criterion icon={UsersRound} title="Comunidad" text="Que invite a volver." /></section><div className="mt-10 grid gap-6 xl:grid-cols-2">{concepts.map((concept) => <ConceptCard key={concept.number} {...concept} />)}</div><section className="mt-10 rounded-[28px] bg-[#202d32] p-6 text-white md:p-8"><div className="flex flex-col justify-between gap-6 md:flex-row md:items-center"><div><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#c7ff54]">Cómo escoger</p><h2 className="mt-2 text-2xl font-semibold tracking-[-0.05em]">Elijamos una dirección antes de seguir programando.</h2><p className="mt-2 max-w-[720px] text-sm leading-6 text-[#bdc9c7]">Cuando escojamos una, la convertiré en el sistema visual base: colores, tipografías, botones, tarjetas, estados, navegación y versión móvil.</p></div><Link href="/" className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#c7ff54] px-5 py-3 text-xs font-bold text-[#202d32] transition hover:bg-[#d6ff7b]">Volver a probar el MVP <ArrowRight size={15} /></Link></div></section></div></main>;
 }
 
-function DesignCard({ id, number, name, label, description, ideal, strengths, tradeoff, colors }: { id: string; number: string; name: string; label: string; description: string; ideal: string; strengths: string[]; tradeoff: string; colors: string[] }) {
-  return <article className="overflow-hidden rounded-3xl border border-[#dfe8e0] bg-white shadow-[0_12px_35px_rgba(39,65,60,0.05)]"><div className="border-b border-[#edf1ed] p-5 pb-4"><div className="flex items-center justify-between"><span className="text-[11px] font-semibold tracking-[0.12em] text-[#91a09a]">{number} / 03</span><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${id === "confianza" ? "bg-[#eaf5e8] text-[#4d8c54]" : id === "radar" ? "bg-[#fff2d4] text-[#9b722a]" : "bg-[#fbe9e3] text-[#b96d54]"}`}>{label}</span></div><h2 className="mt-4 text-2xl font-semibold tracking-[-0.05em] text-[#173a37]">{name}</h2><p className="mt-2 text-xs leading-5 text-[#7c8b84]">{description}</p></div><div><Preview id={id} /><div className="flex gap-1 bg-white px-5 pb-4">{colors.map((color) => <span key={color} className="h-2 flex-1 rounded-full" style={{ backgroundColor: color }} />)}</div></div><div className="space-y-5 p-5"><div><p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#95a19c]">Ideal para</p><p className="mt-1 text-xs font-semibold text-[#52645d]">{ideal}</p></div><div><p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#95a19c]">Fortalezas</p><ul className="mt-2 space-y-2">{strengths.map((strength) => <li key={strength} className="flex items-start gap-2 text-xs text-[#65766e]"><Check size={14} className="mt-0.5 shrink-0 text-[#6fa35b]" />{strength}</li>)}</ul></div><div className="border-t border-[#edf1ed] pt-4"><p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#95a19c]">Trade-off</p><p className="mt-1 text-xs leading-5 text-[#7f8d87]">{tradeoff}</p></div></div></article>;
+function Criterion({ icon: Icon, title, text }: { icon: typeof Sparkles; title: string; text: string }) {
+  return <div className="rounded-2xl border border-[#e3e5e1] bg-white p-4"><div className="flex items-center gap-2 text-[#6678d9]"><Icon size={16} /><span className="text-xs font-semibold text-[#344148]">{title}</span></div><p className="mt-2 text-[11px] text-[#87918b]">{text}</p></div>;
 }
 
-function Preview({ id }: { id: string }) {
-  if (id === "radar") return <div className="bg-[#151719] p-4"><div className="overflow-hidden rounded-2xl border border-white/10 bg-[#202427] shadow-2xl"><div className="flex items-center justify-between border-b border-white/10 px-4 py-3"><div className="flex items-center gap-2"><div className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#d8f26b] text-[#151719]"><Zap size={13} /></div><span className="text-[10px] font-semibold text-white">RADAR / MEDELLÍN</span></div><span className="flex items-center gap-1 text-[9px] text-[#d8f26b]"><span className="h-1.5 w-1.5 rounded-full bg-[#d8f26b]" />EN LÍNEA</span></div><div className="grid grid-cols-[1.05fr_0.95fr] gap-3 p-3"><div className="relative min-h-[190px] overflow-hidden rounded-xl bg-[#2b3435]"><div className="absolute inset-0 opacity-30" style={{ backgroundImage: "linear-gradient(#89958d 1px, transparent 1px), linear-gradient(90deg, #89958d 1px, transparent 1px)", backgroundSize: "28px 28px" }} /><div className="absolute left-[42%] top-[39%] h-16 w-16 rounded-full border border-[#d8f26b]/50 bg-[#d8f26b]/10" /><div className="absolute left-[53%] top-[46%] h-2.5 w-2.5 rounded-full bg-[#ffbd59] shadow-[0_0_0_5px_rgba(255,189,89,0.15)]" /><div className="absolute left-[26%] top-[61%] h-2 w-2 rounded-full bg-[#d8f26b]" /><div className="absolute bottom-3 left-3 rounded-lg bg-[#151719]/80 px-2 py-1 text-[9px] text-[#e8efea]">12 oportunidades · radio 5 km</div></div><div className="space-y-2"><div className="rounded-xl border border-white/10 bg-[#2b3033] p-3"><div className="flex justify-between text-[9px] text-[#9da9a1]"><span>PLOMERÍA</span><span className="text-[#d8f26b]">NUEVA</span></div><p className="mt-2 text-[11px] font-semibold leading-4 text-white">Fuga de agua en cocina</p><div className="mt-3 flex items-center justify-between text-[9px] text-[#9da9a1]"><span>El Poblado · 2.4 km</span><strong className="text-[#ffbd59]">$250k</strong></div></div><div className="rounded-xl border border-white/10 bg-[#2b3033] p-3 opacity-70"><div className="flex justify-between text-[9px] text-[#9da9a1]"><span>ELECTRICIDAD</span><span>MAÑANA</span></div><p className="mt-2 text-[11px] font-semibold leading-4 text-white">Instalar lámparas</p><div className="mt-3 text-[9px] text-[#9da9a1]">Laureles · 3.1 km</div></div></div></div></div></div>;
-  if (id === "cercania") return <div className="bg-[#fbf7f0] p-4"><div className="overflow-hidden rounded-2xl border border-[#e8ded2] bg-[#fffdf9] shadow-[0_14px_30px_rgba(106,79,54,0.08)]"><div className="flex items-center justify-between border-b border-[#efe7de] px-4 py-3"><div className="flex items-center gap-2"><div className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#ed8c6d] text-white"><Wrench size={13} /></div><span className="text-[10px] font-semibold text-[#3b4754]">Manos a la obra</span></div><span className="text-[9px] text-[#87929b]">Hola, Camilo</span></div><div className="p-4"><p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-[#ed8c6d]">¿Qué necesitas resolver?</p><h3 className="mt-2 max-w-[230px] text-[19px] font-semibold leading-6 tracking-[-0.05em] text-[#3b4754]">Encuentra a alguien de confianza cerca de ti.</h3><div className="mt-4 flex items-center gap-2 rounded-xl border border-[#e8ded2] bg-[#fffaf4] px-3 py-2.5 text-[10px] text-[#9a9e9b]"><MapPin size={13} className="text-[#ed8c6d]" />Tu zona: El Poblado<ChevronRight size={13} className="ml-auto" /></div><div className="mt-4 grid grid-cols-2 gap-2"><div className="rounded-xl bg-[#dce9f0] p-3"><Wrench size={15} className="text-[#5c7c8d]" /><p className="mt-4 text-[10px] font-semibold text-[#3b4754]">Reparaciones</p><p className="mt-1 text-[9px] text-[#768793]">12 técnicos</p></div><div className="rounded-xl bg-[#fbe4d9] p-3"><Sparkles size={15} className="text-[#c87a60]" /><p className="mt-4 text-[10px] font-semibold text-[#3b4754]">Hogar</p><p className="mt-1 text-[9px] text-[#768793]">8 categorías</p></div></div><button type="button" className="mt-4 w-full rounded-xl bg-[#ed8c6d] py-2.5 text-[10px] font-bold text-white">Publicar una solicitud</button></div></div></div>;
-  return <div className="bg-[#f7f9f7] p-4"><div className="overflow-hidden rounded-2xl border border-[#dce8dc] bg-[#fbfcfa] shadow-[0_14px_30px_rgba(39,65,60,0.08)]"><div className="flex items-center justify-between border-b border-[#e7ece9] px-4 py-3"><div className="flex items-center gap-2"><div className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#a3e635] text-[#173a37]"><Wrench size={13} /></div><span className="text-[10px] font-semibold text-[#173a37]">Manos a la obra</span></div><span className="text-[9px] font-semibold text-[#6f8277]">Técnico verificado</span></div><div className="grid grid-cols-[0.9fr_1.1fr] gap-3 p-4"><div><p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-[#72917e]">Tu jornada</p><h3 className="mt-2 text-[18px] font-semibold leading-5 tracking-[-0.05em] text-[#173a37]">Hay 12 oportunidades cerca de ti.</h3><div className="mt-4 rounded-xl bg-[#dcefd8] p-3"><div className="flex items-center gap-1 text-[9px] font-bold text-[#4d8c54]"><Wallet size={12} />SALDO PREPAGO</div><p className="mt-2 text-[17px] font-semibold text-[#173a37]">$180.000</p><div className="mt-2 h-1 rounded-full bg-white/70"><div className="h-1 w-[72%] rounded-full bg-[#79ab62]" /></div></div></div><div className="space-y-2"><div className="rounded-xl border border-[#e7ece9] bg-white p-3"><div className="flex items-center justify-between"><span className="text-[9px] font-semibold text-[#72917e]">PLOMERÍA</span><span className="flex items-center gap-1 text-[9px] text-[#4d9c5a]"><Clock3 size={11} />Hoy</span></div><p className="mt-2 text-[11px] font-semibold text-[#173a37]">Reparar fuga de agua</p><div className="mt-3 flex items-center justify-between text-[9px] text-[#8b9993]"><span>El Poblado</span><strong className="text-[#173a37]">$250.000</strong></div></div><div className="rounded-xl border border-[#e7ece9] bg-white p-3 opacity-70"><div className="flex items-center justify-between"><span className="text-[9px] font-semibold text-[#72917e]">PINTURA</span><span className="text-[9px] text-[#8b9993]">Sábado</span></div><p className="mt-2 text-[11px] font-semibold text-[#173a37]">Pintar una habitación</p></div></div></div></div></div>;
+function ConceptCard({ number, name, label, description, ideal, strengths, tradeoff, colors, kind }: (typeof concepts)[number]) {
+  return <article className="overflow-hidden rounded-[28px] border border-[#e3e5e1] bg-white shadow-[0_12px_35px_rgba(44,56,54,0.045)]"><div className="flex flex-col justify-between gap-4 border-b border-[#edf0eb] p-6 sm:flex-row sm:items-start"><div><span className="text-[11px] font-semibold tracking-[0.15em] text-[#98a09b]">{number} / 04</span><h2 className="mt-3 text-2xl font-semibold tracking-[-0.06em] text-[#202d32]">{name}</h2><p className="mt-2 max-w-[480px] text-xs leading-5 text-[#77827d]">{description}</p></div><span className="w-fit rounded-full bg-[#f1f3ee] px-3 py-1.5 text-[10px] font-bold text-[#69756f]">{label}</span></div><ConceptPreview kind={kind} /><div className="p-6"><div className="flex flex-wrap items-center gap-1.5">{colors.map((color) => <span key={color} className="h-5 w-12 rounded-full border border-black/5" style={{ backgroundColor: color }} />)}</div><div className="mt-6 grid gap-6 sm:grid-cols-2"><div><p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#98a09b]">Ideal para</p><p className="mt-2 text-xs font-semibold leading-5 text-[#485650]">{ideal}</p></div><div><p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#98a09b]">Trade-off</p><p className="mt-2 text-xs leading-5 text-[#7d8982]">{tradeoff}</p></div></div><div className="mt-6 border-t border-[#edf0eb] pt-5"><p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#98a09b]">Qué aporta</p><ul className="mt-3 grid gap-2 sm:grid-cols-3">{strengths.map((strength) => <li key={strength} className="flex items-start gap-2 text-xs leading-5 text-[#64726b]"><Check size={14} className="mt-0.5 shrink-0 text-[#6b8cd4]" />{strength}</li>)}</ul></div></div></article>;
+}
+
+function ConceptPreview({ kind }: { kind: (typeof concepts)[number]["kind"] }) {
+  if (kind === "editorial") return <div className="bg-[#f2eee7] p-5"><div className="overflow-hidden rounded-[22px] bg-[#33202a] text-[#f2eee7] shadow-xl"><div className="flex items-center justify-between border-b border-white/15 px-5 py-4"><div className="flex items-center gap-2 text-xs font-semibold"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#d8c8b6] text-[#33202a]"><Wrench size={13} /></span>MANOS A LA OBRA</div><span className="text-[9px] uppercase tracking-[0.15em] text-[#d8c8b6]">Selección local</span></div><div className="grid gap-5 p-5 sm:grid-cols-[0.9fr_1.1fr] sm:p-7"><div><p className="text-[9px] uppercase tracking-[0.2em] text-[#d8c8b6]">Un buen trabajo empieza aquí</p><h3 className="mt-3 text-3xl font-semibold leading-8 tracking-[-0.07em]">Encuentra a la persona correcta.</h3><p className="mt-3 max-w-[250px] text-[10px] leading-5 text-[#dbcfc7]">Técnicos verificados, precios claros y una forma segura de coordinar.</p><button type="button" className="mt-5 rounded-full bg-[#3558e8] px-4 py-2 text-[10px] font-bold text-white">Publicar una necesidad</button></div><div className="rounded-[18px] bg-[#f2eee7] p-3 text-[#33202a]"><div className="flex items-center justify-between text-[9px] font-semibold"><span>HOY EN EL POBLADO</span><span className="text-[#3558e8]">4.9 ★</span></div><div className="mt-3 rounded-xl bg-white p-3"><div className="flex items-center gap-2"><div className="h-7 w-7 rounded-full bg-[#d8c8b6]" /><div><p className="text-[10px] font-semibold">Juliana Salazar</p><p className="text-[9px] text-[#92918a]">Plomería · 31 servicios</p></div></div><p className="mt-3 text-[11px] font-semibold">Reparar fuga de agua</p><div className="mt-3 flex items-center justify-between"><span className="text-[9px] text-[#92918a]">Disponible hoy</span><strong className="text-[12px]">$250.000</strong></div></div></div></div></div></div>;
+  if (kind === "electric") return <div className="bg-[#0d1938] p-5"><div className="overflow-hidden rounded-[18px] border border-white/10 bg-[#111f46] text-white shadow-xl"><div className="flex items-center justify-between border-b border-white/10 px-4 py-3"><div className="flex items-center gap-2 text-[10px] font-bold"><span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#c7ff54] text-[#0d1938]"><Zap size={13} /></span>RADAR / 12 ACTIVAS</div><div className="flex items-center gap-1 text-[9px] text-[#c7ff54]"><span className="h-1.5 w-1.5 rounded-full bg-[#c7ff54]" />ONLINE</div></div><div className="grid gap-3 p-4 sm:grid-cols-[1.05fr_0.95fr]"><div className="relative min-h-[175px] overflow-hidden rounded-xl bg-[#1d2d5a]"><div className="absolute inset-0 opacity-20" style={{ backgroundImage: "linear-gradient(#a9b7db 1px, transparent 1px), linear-gradient(90deg, #a9b7db 1px, transparent 1px)", backgroundSize: "26px 26px" }} /><div className="absolute left-[45%] top-[38%] h-20 w-20 rounded-full border border-[#c7ff54]/60 bg-[#c7ff54]/10" /><div className="absolute left-[53%] top-[46%] h-2.5 w-2.5 rounded-full bg-[#ffbd59] shadow-[0_0_0_5px_rgba(255,189,89,0.16)]" /><div className="absolute bottom-3 left-3 rounded-lg bg-[#0d1938]/80 px-2 py-1 text-[9px] text-[#eef3ff]">Radio de trabajo · 5 km</div></div><div className="space-y-2"><QueueItem category="PLOMERÍA" title="Fuga de agua en cocina" price="$250k" tone="lime" /><QueueItem category="ELECTRICIDAD" title="Instalar lámparas" price="$180k" tone="blue" /></div></div></div></div>;
+  if (kind === "community") return <div className="bg-[#fff0e9] p-5"><div className="overflow-hidden rounded-[22px] border border-[#f2d5c8] bg-white text-[#20354d] shadow-xl"><div className="flex items-center justify-between border-b border-[#f3e4dc] px-5 py-4"><div className="flex items-center gap-2 text-xs font-bold"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#df7655] text-white"><UsersRound size={13} /></span>Manos a la obra</div><div className="flex -space-x-2"><span className="h-6 w-6 rounded-full border-2 border-white bg-[#b7d2df]" /><span className="h-6 w-6 rounded-full border-2 border-white bg-[#f2c1a8]" /><span className="h-6 w-6 rounded-full border-2 border-white bg-[#d8c89e]" /></div></div><div className="p-5"><p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-[#df7655]">Recomendado por vecinos</p><h3 className="mt-2 max-w-[300px] text-2xl font-semibold leading-7 tracking-[-0.06em]">Ayuda real, de personas cerca de ti.</h3><div className="mt-4 flex items-center gap-3 rounded-2xl bg-[#fff0e9] p-3"><div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f2c1a8] text-xs font-bold text-[#93553f]">JS</div><div><p className="text-[10px] font-semibold">Juliana tiene 4.8 ★</p><p className="mt-1 text-[9px] text-[#82909a]">“Muy recomendada en Laureles”</p></div><ChevronRight size={14} className="ml-auto text-[#df7655]" /></div><button type="button" className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#df7655] py-2.5 text-[10px] font-bold text-white">Cuéntanos qué necesitas <ArrowRight size={13} /></button></div></div></div>;
+  return <div className="bg-[#e9f0ed] p-5"><div className="overflow-hidden rounded-[22px] border border-[#cddbd5] bg-[#27323b] text-white shadow-xl"><div className="flex items-center justify-between border-b border-white/10 px-5 py-4"><div className="flex items-center gap-2 text-xs font-bold"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#f4b64f] text-[#27323b]"><Navigation size={13} /></span>COBERTURA EN VIVO</div><span className="rounded-full bg-[#a7dfc4] px-2 py-1 text-[9px] font-bold text-[#27323b]">12 ACTIVAS</span></div><div className="relative min-h-[215px] overflow-hidden bg-[#35424a]"><div className="absolute inset-0 opacity-30" style={{ backgroundImage: "linear-gradient(28deg, transparent 48%, #a7dfc4 49%, #a7dfc4 51%, transparent 52%), linear-gradient(112deg, transparent 46%, #a7dfc4 47%, #a7dfc4 48%, transparent 49%), linear-gradient(#8ea49a 1px, transparent 1px), linear-gradient(90deg, #8ea49a 1px, transparent 1px)", backgroundSize: "100% 100%, 100% 100%, 34px 34px, 34px 34px" }} /><div className="absolute left-[47%] top-[36%] h-24 w-24 rounded-full border-2 border-[#f4b64f]/70 bg-[#f4b64f]/10" /><span className="absolute left-[52%] top-[43%] h-3 w-3 rounded-full bg-[#f4b64f] shadow-[0_0_0_6px_rgba(244,182,79,0.2)]" /><span className="absolute left-[27%] top-[63%] h-2.5 w-2.5 rounded-full bg-[#a7dfc4]" /><div className="absolute bottom-4 left-4 right-4 flex items-center justify-between rounded-xl bg-[#27323b]/90 px-3 py-2"><span className="flex items-center gap-1 text-[9px] text-[#d9e5df]"><MapPin size={11} />El Poblado</span><span className="text-[9px] text-[#f4b64f]">3 técnicos cerca</span></div></div></div></div>;
+}
+
+function QueueItem({ category, title, price, tone }: { category: string; title: string; price: string; tone: "lime" | "blue" }) {
+  return <div className="rounded-xl border border-white/10 bg-[#1d2d5a] p-3"><div className="flex items-center justify-between text-[9px] font-semibold"><span className={tone === "lime" ? "text-[#c7ff54]" : "text-[#9fb5ff]"}>{category}</span><Clock3 size={11} className="text-[#8b9ac4]" /></div><p className="mt-2 text-[11px] font-semibold leading-4 text-white">{title}</p><div className="mt-3 flex items-center justify-between text-[9px] text-[#9eacd0]"><span>Hace 8 min</span><strong className="text-[#c7ff54]">{price}</strong></div></div>;
 }
