@@ -58,6 +58,46 @@ button {
   box-shadow: 0 0 0 4px rgb(77 105 216 / 10%);
 }
 
+.mapbox-request-marker {
+  width: 14px;
+  height: 14px;
+  border: 3px solid #ffffff;
+  border-radius: 9999px;
+  background: #4d69d8;
+  box-shadow: 0 0 0 5px rgb(77 105 216 / 18%);
+  cursor: pointer;
+}
+
+.mapbox-request-marker:focus-visible {
+  outline: 3px solid #19242d;
+  outline-offset: 3px;
+}
+
+.mapbox-request-popup {
+  display: grid;
+  gap: 3px;
+  min-width: 112px;
+  color: #19242d;
+  font-size: 11px;
+}
+
+.mapbox-request-popup span {
+  color: #71808f;
+  font-size: 10px;
+}
+
+.mapboxgl-ctrl-group {
+  overflow: hidden;
+  border: 1px solid rgb(220 227 239 / 90%) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 18px rgb(40 52 68 / 10%) !important;
+}
+
+.mapboxgl-ctrl-group button {
+  width: 32px !important;
+  height: 32px !important;
+}
+
 ::selection {
   background: #cbd5ff;
   color: #19242d;
