@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f7f9f7;
-  --foreground: #173a37;
+  --background: #f7f8fa;
+  --foreground: #19242d;
 }
 
 @theme inline {
@@ -42,7 +42,7 @@ button {
   border-radius: 0.75rem;
   background: white;
   padding: 0.7rem 0.8rem;
-  color: #173a37;
+  color: #19242d;
   font-size: 0.75rem;
   font-weight: 400;
   outline: none;
@@ -54,13 +54,13 @@ button {
 }
 
 .input-style:focus {
-  border-color: #9acb82;
-  box-shadow: 0 0 0 4px rgb(163 230 53 / 10%);
+  border-color: #8fa4ee;
+  box-shadow: 0 0 0 4px rgb(77 105 216 / 10%);
 }
 
 ::selection {
-  background: #cdeca8;
-  color: #173a37;
+  background: #cbd5ff;
+  color: #19242d;
 }
 
 ::-webkit-scrollbar {
@@ -69,10 +69,10 @@ button {
 }
 
 ::-webkit-scrollbar-track {
-  background: #f7f9f7;
+  background: #f7f8fa;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #c9d7cf;
+  background: #c9d0de;
   border-radius: 999px;
 }
