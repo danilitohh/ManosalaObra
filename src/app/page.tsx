@@ -1,5 +1,5 @@
-import MarketplaceApp from "@/components/marketplace/MarketplaceApp";
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  return <MarketplaceApp />;
+  redirect("/tecnico");
 }
