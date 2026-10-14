@@ -29,25 +29,20 @@ import Link from "next/link";
 import NextImage from "next/image";
 import { Button, Card, Chip } from "@heroui/react";
 import type { LucideIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, FormEvent, ReactNode } from "react";
 import { KokonutGlassCard } from "@/components/ui/kokonut-glass-card";
 import { MapboxRadar } from "@/components/maps/MapboxRadar";
 import { ReactBitsReveal } from "@/components/ui/react-bits-reveal";
 import { ServiceCategoryIcon } from "@/components/ui/service-category-icon";
+import { SupabaseAuthPanel } from "@/components/auth/SupabaseAuthPanel";
+import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { loadMarketplaceState, uploadRequestPhotos } from "@/lib/supabase/marketplace";
 import {
   commissionFor,
-  advanceService,
-  completeDigitalPayment,
-  confirmServiceCompletion,
-  createOffer,
-  createRequest,
-  currentClient,
-  currentTechnician,
-  demoTechnicians,
   distanceBetween,
-  initialMarketplaceState,
   locationForSector,
+  type User,
   type GeoPoint,
   type MarketplaceState,
   type Offer,
@@ -55,9 +50,6 @@ import {
   type Service,
   type ServiceRequest,
   type UserRole,
-  selectOffer,
-  cancelService,
-  rechargeWallet,
   technicianPayoutFor,
 } from "@/lib/marketplace";
 
@@ -69,8 +61,15 @@ type NavItem = {
   badge?: string;
 };
 
-const STORAGE_KEY = "manos-a-la-obra:marketplace:v1";
-const TECHNICIAN_AVAILABILITY_KEY = "manos-a-la-obra:technician:available:v1";
+type LiveMarketplaceState = MarketplaceState & { technicians: User[] };
+const EMPTY_MARKETPLACE_STATE: LiveMarketplaceState = {
+  requests: [],
+  offers: [],
+  services: [],
+  walletBalance: 0,
+  walletTransactions: [],
+  technicians: [],
+};
 const technicianNav: NavItem[] = [
   { label: "Radar", icon: Zap, badge: "12" },
   { label: "Mis servicios", icon: BriefcaseBusiness },
@@ -166,7 +165,7 @@ function LedgerRequestCard({ request, offerCount, offered, onOpen, onOffer, isAv
   );
 }
 function LedgerBalanceCard({ balance, onRecharge }: { balance: number; onRecharge: () => void }) {
-  return <KokonutGlassCard className="relative overflow-hidden rounded-2xl bg-[#19242d] text-white shadow-[0_14px_36px_rgba(25,36,45,0.18)]"><div className="absolute -right-8 -top-10 h-32 w-32 rounded-full border-[18px] border-white/5" /><div className="absolute -bottom-14 -right-2 h-36 w-36 rounded-full border-[18px] border-[#4d69d8]/15" /><div className="relative p-5"><div className="flex items-center justify-between"><span className="flex items-center gap-2 text-xs font-medium text-[#b4c0cb]"><Wallet size={15} />Saldo prepago</span><MoreHorizontal size={18} className="text-[#9eacba]" /></div><p className="mt-5 text-[30px] font-semibold tracking-[-0.06em]">{formatCOP(balance)}</p><p className="mt-1 text-[11px] text-[#9eacba]">Disponible para comisiones</p><div className="mt-5 flex items-center justify-between rounded-xl border border-white/10 bg-white/7 px-3 py-2.5"><span className="text-[11px] text-[#acb8c4]">Comisión siguiente</span><span className="text-[11px] font-semibold text-[#cbd5ff]">Desde $18.000</span></div><LedgerButton onPress={onRecharge} className="mt-4 w-full bg-[#4d69d8] text-white hover:bg-[#6d82e8]"><Plus size={15} />Simular recarga +$100.000</LedgerButton></div></KokonutGlassCard>;
+  return <KokonutGlassCard className="relative overflow-hidden rounded-2xl bg-[#19242d] text-white shadow-[0_14px_36px_rgba(25,36,45,0.18)]"><div className="absolute -right-8 -top-10 h-32 w-32 rounded-full border-[18px] border-white/5" /><div className="absolute -bottom-14 -right-2 h-36 w-36 rounded-full border-[18px] border-[#4d69d8]/15" /><div className="relative p-5"><div className="flex items-center justify-between"><span className="flex items-center gap-2 text-xs font-medium text-[#b4c0cb]"><Wallet size={15} />Saldo prepago</span><MoreHorizontal size={18} className="text-[#9eacba]" /></div><p className="mt-5 text-[30px] font-semibold tracking-[-0.06em]">{formatCOP(balance)}</p><p className="mt-1 text-[11px] text-[#9eacba]">Disponible para comisiones</p><div className="mt-5 flex items-center justify-between rounded-xl border border-white/10 bg-white/7 px-3 py-2.5"><span className="text-[11px] text-[#acb8c4]">Comisión siguiente</span><span className="text-[11px] font-semibold text-[#cbd5ff]">Desde $18.000</span></div><LedgerButton onPress={onRecharge} isDisabled className="mt-4 w-full bg-[#4d69d8] text-white"><Plus size={15} />Recargas PSE/Nequi próximamente</LedgerButton></div></KokonutGlassCard>;
 }
 
 function OfferModal({ request, onClose, onSent, alreadyOffered }: { request: ServiceRequest; onClose: () => void; onSent: (price: number, message: string) => void; alreadyOffered: boolean }) {
@@ -235,7 +234,7 @@ function CreateRequestModal({ onClose, onCreate }: { onClose: () => void; onCrea
 }
 
 function OffersModal({ request, offers, onClose, onSelect, selectedService }: { request: ServiceRequest; offers: Offer[]; onClose: () => void; onSelect: (offerId: string) => void; selectedService?: Service }) {
-  return <ModalShell onClose={onClose}><div className="flex items-start justify-between"><div><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#6679b1]">Propuestas recibidas</p><h2 className="mt-1 max-w-[370px] text-xl font-semibold tracking-[-0.04em] text-[#19242d]">{request.title}</h2><p className="mt-1 text-xs text-[#82908b]">{offers.length} técnicos interesados · {paymentLabel(request.paymentMethod)}</p></div><button type="button" onClick={onClose} aria-label="Cerrar" className="rounded-full p-2 text-[#84928d] transition hover:bg-[#f1f3f8] hover:text-[#19242d]"><X size={18} /></button></div><div className="mt-5 space-y-3">{offers.length === 0 && <div className="rounded-2xl border border-dashed border-[#cddbd0] px-5 py-8 text-center"><UserRound size={22} className="mx-auto text-[#a5b4ad]" /><p className="mt-3 text-sm font-semibold text-[#52665e]">Aún no hay propuestas</p><p className="mt-1 text-xs text-[#8b9993]">Te avisaremos cuando un técnico se interese.</p></div>}{offers.map((offer) => { const technician = demoTechnicians.find((item) => item.id === offer.technicianId) ?? currentTechnician; return <div key={offer.id} className={`rounded-2xl border p-4 ${offer.status === "accepted" ? "border-[#b7c5ee] bg-[#f5f6ff]" : "border-[#e5ebe6] bg-white"}`}><div className="flex items-start justify-between gap-3"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#dce4ff] text-xs font-bold text-[#4f65a5]">{technician.initials}</div><div><div className="flex items-center gap-1.5"><p className="text-sm font-semibold text-[#19242d]">{technician.name}</p>{technician.verified && <ShieldCheck size={14} className="text-[#4d69d8]" />}</div><p className="mt-0.5 flex items-center gap-1 text-[11px] text-[#85938d]"><Star size={12} className="fill-[#e6ad3f] text-[#e6ad3f]" />{technician.rating} · {technician.completedServices} servicios</p></div></div><div className="text-right"><p className="text-lg font-semibold tracking-[-0.04em] text-[#19242d]">{formatCOP(offer.price)}</p><p className="text-[10px] text-[#9aa5a1]">{offer.createdAt}</p></div></div><p className="mt-3 text-[11px] leading-5 text-[#71807b]">{offer.message}</p><div className="mt-3 flex items-center justify-between border-t border-[#edf1ed] pt-3"><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${offer.status === "accepted" ? "bg-[#e9edff] text-[#4d69d8]" : "bg-[#f3f5f3] text-[#81908a]"}`}>{offer.status === "accepted" ? "Seleccionada" : "Disponible"}</span>{offer.status === "pending" && !selectedService && request.status === "published" && <button type="button" onClick={() => onSelect(offer.id)} className="rounded-xl bg-[#19242d] px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-[#2a3a49]">Seleccionar técnico</button>}</div></div>; })}</div>{request.status === "awaiting_balance" && <div role="status" className="mt-4 rounded-xl bg-[#fff8e9] px-3 py-2.5 text-[11px] leading-4 text-[#957743]">El técnico debe recargar saldo para activar el servicio. La dirección exacta permanece protegida.</div>}<div className="mt-5 rounded-xl bg-[#fff8e9] px-3 py-2.5 text-[11px] leading-4 text-[#957743]"><strong>Recuerda:</strong> al seleccionar una propuesta, el precio queda pactado y la dirección se comparte únicamente con el técnico asignado.</div></ModalShell>;
+  return <ModalShell onClose={onClose}><div className="flex items-start justify-between"><div><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#6679b1]">Propuestas recibidas</p><h2 className="mt-1 max-w-[370px] text-xl font-semibold tracking-[-0.04em] text-[#19242d]">{request.title}</h2><p className="mt-1 text-xs text-[#82908b]">{offers.length} técnicos interesados · {paymentLabel(request.paymentMethod)}</p></div><button type="button" onClick={onClose} aria-label="Cerrar" className="rounded-full p-2 text-[#84928d] transition hover:bg-[#f1f3f8] hover:text-[#19242d]"><X size={18} /></button></div><div className="mt-5 space-y-3">{offers.length === 0 && <div className="rounded-2xl border border-dashed border-[#cddbd0] px-5 py-8 text-center"><UserRound size={22} className="mx-auto text-[#a5b4ad]" /><p className="mt-3 text-sm font-semibold text-[#52665e]">Aún no hay propuestas</p><p className="mt-1 text-xs text-[#8b9993]">Te avisaremos cuando un técnico se interese.</p></div>}{offers.map((offer) => { const technician = offer.technician ?? { id: offer.technicianId, name: "Técnico", initials: "TE", role: "technician" as const, rating: 0, completedServices: 0, verified: false }; return <div key={offer.id} className={`rounded-2xl border p-4 ${offer.status === "accepted" ? "border-[#b7c5ee] bg-[#f5f6ff]" : "border-[#e5ebe6] bg-white"}`}><div className="flex items-start justify-between gap-3"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#dce4ff] text-xs font-bold text-[#4f65a5]">{technician.initials}</div><div><div className="flex items-center gap-1.5"><p className="text-sm font-semibold text-[#19242d]">{technician.name}</p>{technician.verified && <ShieldCheck size={14} className="text-[#4d69d8]" />}</div><p className="mt-0.5 flex items-center gap-1 text-[11px] text-[#85938d]"><Star size={12} className="fill-[#e6ad3f] text-[#e6ad3f]" />{technician.rating} · {technician.completedServices} servicios</p></div></div><div className="text-right"><p className="text-lg font-semibold tracking-[-0.04em] text-[#19242d]">{formatCOP(offer.price)}</p><p className="text-[10px] text-[#9aa5a1]">{offer.createdAt}</p></div></div><p className="mt-3 text-[11px] leading-5 text-[#71807b]">{offer.message}</p><div className="mt-3 flex items-center justify-between border-t border-[#edf1ed] pt-3"><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${offer.status === "accepted" ? "bg-[#e9edff] text-[#4d69d8]" : "bg-[#f3f5f3] text-[#81908a]"}`}>{offer.status === "accepted" ? "Seleccionada" : "Disponible"}</span>{offer.status === "pending" && !selectedService && request.status === "published" && <button type="button" onClick={() => onSelect(offer.id)} className="rounded-xl bg-[#19242d] px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-[#2a3a49]">Seleccionar técnico</button>}</div></div>; })}</div>{request.status === "awaiting_balance" && <div role="status" className="mt-4 rounded-xl bg-[#fff8e9] px-3 py-2.5 text-[11px] leading-4 text-[#957743]">El técnico debe recargar saldo para activar el servicio. La dirección exacta permanece protegida.</div>}<div className="mt-5 rounded-xl bg-[#fff8e9] px-3 py-2.5 text-[11px] leading-4 text-[#957743]"><strong>Recuerda:</strong> al seleccionar una propuesta, el precio queda pactado y la dirección se comparte únicamente con el técnico asignado.</div></ModalShell>;
 }
 
 function ServiceModal({ service, request, onClose, onCancel, role, onAdvance, onConfirm, onPay }: {
@@ -292,13 +291,20 @@ function EmptyPanel({ title, text, icon: Icon }: { title: string; text: string; 
 
 export default function MarketplaceApp({ mode }: { mode: Mode }) {
   const [activeNav, setActiveNav] = useState(mode === "technician" ? "Radar" : "Inicio");
-  const [state, setState] = useState<MarketplaceState>(initialMarketplaceState);
-  const loadedFromStorage = useRef(false);
-  const availabilityLoaded = useRef(false);
+  const supabase = useMemo(() => getSupabaseBrowserClient(), []);
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
+  const [profile, setProfile] = useState<User | null>(null);
+  const profileId = profile?.id;
+  const [authLoading, setAuthLoading] = useState(Boolean(supabase));
+  const [profileError, setProfileError] = useState("");
+  const [state, setState] = useState<LiveMarketplaceState>(EMPTY_MARKETPLACE_STATE);
+  const [stateLoading, setStateLoading] = useState(true);
+  const [stateError, setStateError] = useState("");
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
   const [toast, setToast] = useState("");
   const [filter, setFilter] = useState("Todas");
   const [sortBy, setSortBy] = useState<"distance" | "budget" | "recent">("distance");
-  const [isAvailable, setIsAvailable] = useState(true);
+  const [isAvailable, setIsAvailable] = useState(false);
   const [radarOrigin, setRadarOrigin] = useState<GeoPoint>(() => locationForSector("El Poblado"));
   const [manualSector, setManualSector] = useState("El Poblado");
   const [locationLabel, setLocationLabel] = useState("El Poblado · ubicación aproximada");
@@ -309,54 +315,90 @@ export default function MarketplaceApp({ mode }: { mode: Mode }) {
   const [detailService, setDetailService] = useState<Service | null>(null);
 
   useEffect(() => {
-    const loadStoredState = window.setTimeout(() => {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        try { setState(JSON.parse(saved) as MarketplaceState); } catch { window.localStorage.removeItem(STORAGE_KEY); }
-      }
-      loadedFromStorage.current = true;
-    }, 0);
-    return () => window.clearTimeout(loadStoredState);
-  }, []);
-  useEffect(() => { if (loadedFromStorage.current) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }, [state]);
+    if (!supabase) return;
+    let active = true;
+    void supabase.auth.getSession().then(({ data, error }) => {
+      if (!active) return;
+      if (error) setProfileError(error.message);
+      setAuthUserId(data.session?.user.id ?? null);
+      setAuthLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!active) return;
+      if (event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_UPDATED") setProfile(null);
+      setAuthUserId(session?.user.id ?? null);
+    });
+    return () => { active = false; subscription.unsubscribe(); };
+  }, [supabase]);
+
   useEffect(() => {
-    const loadAvailability = window.setTimeout(() => {
-      const savedAvailability = window.localStorage.getItem(TECHNICIAN_AVAILABILITY_KEY);
-      if (savedAvailability !== null) setIsAvailable(savedAvailability === "true");
-      availabilityLoaded.current = true;
-    }, 0);
-    return () => window.clearTimeout(loadAvailability);
-  }, []);
+    if (!supabase || !authUserId) return;
+    let active = true;
+    void Promise.resolve(supabase.from("profiles")
+      .select("id, display_name, role, rating, completed_services, verified, is_available")
+      .eq("id", authUserId)
+      .single())
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) setProfileError(error.message);
+        else {
+          setProfileError("");
+          setProfile({
+            id: data.id,
+            name: data.display_name,
+            initials: String(data.display_name).split(/\\s+/).slice(0, 2).map((part: string) => part[0]).join("").toUpperCase(),
+            role: data.role,
+            rating: Number(data.rating),
+            completedServices: Number(data.completed_services),
+            verified: Boolean(data.verified),
+            available: Boolean(data.is_available),
+          });
+          setIsAvailable(Boolean(data.is_available));
+        }
+      })
+      .finally(() => { if (active) setStateLoading(false); });
+    return () => { active = false; };
+  }, [supabase, authUserId]);
+
   useEffect(() => {
-    if (availabilityLoaded.current) window.localStorage.setItem(TECHNICIAN_AVAILABILITY_KEY, String(isAvailable));
-  }, [isAvailable]);
-  useEffect(() => {
-    const syncMarketplaceState = (event: StorageEvent) => {
-      if (event.key === TECHNICIAN_AVAILABILITY_KEY) {
-        if (event.newValue !== null) setIsAvailable(event.newValue === "true");
-        return;
-      }
-      if (event.key !== STORAGE_KEY && event.key !== null) return;
-      if (!event.newValue) {
-        setState(initialMarketplaceState);
-        return;
-      }
+    if (!supabase || !profileId) return;
+    let active = true;
+    let refreshTimer: number | undefined;
+    const refresh = async () => {
       try {
-        setState(JSON.parse(event.newValue) as MarketplaceState);
-      } catch {
-        // Ignore malformed updates from another tab; the last valid state remains visible.
+        const nextState = await loadMarketplaceState(supabase);
+        if (active) { setState(nextState); setStateError(""); }
+      } catch (error) {
+        if (active) setStateError(error instanceof Error ? error.message : "No pudimos leer los datos de Supabase.");
+      } finally {
+        if (active) setStateLoading(false);
       }
     };
-    window.addEventListener("storage", syncMarketplaceState);
-    return () => window.removeEventListener("storage", syncMarketplaceState);
-  }, []);
+    void refresh();
+    const channel = supabase.channel(`marketplace:${profileId}`);
+    for (const table of ["service_requests", "request_media", "offers", "services", "technician_wallets", "wallet_transactions", "profiles"]) {
+      channel.on("postgres_changes", { event: "*", schema: "public", table }, () => {
+        window.clearTimeout(refreshTimer);
+        refreshTimer = window.setTimeout(() => { void refresh(); }, 120);
+      });
+    }
+    channel.subscribe((status) => {
+      setRealtimeConnected(status === "SUBSCRIBED");
+      if (status === "SUBSCRIBED") { window.clearTimeout(refreshTimer); void refresh(); }
+    });
+    return () => {
+      active = false;
+      window.clearTimeout(refreshTimer);
+      setRealtimeConnected(false);
+      void supabase.removeChannel(channel);
+    };
+  }, [supabase, profileId]);
 
   const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(""), 3200); };
   const offerCount = (requestId: string) => state.offers.filter((offer) => offer.requestId === requestId).length;
   const visibleRequests = useMemo(() => {
     const available = state.requests
       .filter((request) => request.status === "published")
-      .filter((request) => filter === "Todas" || request.category === filter)
       .map((request, index) => {
         const distance = distanceBetween(radarOrigin, locationForSector(request.sector));
         return { ...request, distanceKm: distance, distance: distance < 0.2 ? "≈ 0.5 km" : `${distance.toFixed(1)} km`, order: index };
@@ -368,33 +410,96 @@ export default function MarketplaceApp({ mode }: { mode: Mode }) {
       if (sortBy === "recent") return first.order - second.order;
       return first.distanceKm - second.distanceKm;
     });
-  }, [state.requests, filter, radarOrigin, sortBy]);
-  const clientRequests = state.requests.filter((request) => request.clientId === currentClient.id || request.clientId === "client-demo");
-  const clientServices = state.services.filter((service) => service.clientId === currentClient.id || state.requests.some((request) => request.id === service.requestId && request.clientId === "client-demo"));
+  }, [state.requests, radarOrigin, sortBy]);
+  const clientRequests = state.requests.filter((request) => request.clientId === profile?.id);
+  const clientServices = state.services.filter((service) => service.clientId === profile?.id);
 
-  const sendOffer = (request: ServiceRequest, price: number, message: string) => { setState((current) => ({ ...current, offers: [...current.offers, createOffer(request.id, price, message)] })); setOfferRequest(null); notify(price === request.budget ? "Te postulaste por el presupuesto del cliente" : "Tu contraoferta fue enviada al cliente"); };
-  const openOffer = (request: ServiceRequest) => { if (!isAvailable) { notify("Activa tu disponibilidad para enviar una propuesta"); return; } setOfferRequest(request); };
-  const publishRequest = (input: Omit<ServiceRequest, "id" | "clientId" | "status" | "createdAt">) => { setState((current) => ({ ...current, requests: [createRequest(input), ...current.requests] })); setCreateRequestOpen(false); notify("Solicitud publicada. Ya puede recibir propuestas."); };
-  const chooseOffer = (requestId: string, offerId: string) => { const request = state.requests.find((item) => item.id === requestId); const offer = state.offers.find((item) => item.id === offerId); setState((current) => selectOffer(current, requestId, offerId)); setDetailRequest(null); if (request && offer) notify(request.paymentMethod === "cash" && state.walletBalance < commissionFor(offer.price) ? "La selección espera una recarga de saldo" : "Técnico seleccionado. Servicio asignado."); };
-  const cancelSelectedService = (serviceId: string) => { setState((current) => cancelService(current, serviceId)); setDetailService(null); notify("Servicio cancelado y comisión revertida"); };
-  const recharge = () => {
-    setState((current) => {
-      let next = rechargeWallet(current, 100000);
-      const waitingRequests = next.requests.filter((request) => request.status === "awaiting_balance" && request.selectedOfferId);
-      for (const request of waitingRequests) next = selectOffer(next, request.id, request.selectedOfferId as string);
-      return next;
-    });
-    notify("Recarga de prueba +$100.000. Revisando servicios pendientes.");
+  const toggleAvailability = async () => {
+    if (!supabase || !profile || profile.role !== "technician") return;
+    const nextAvailability = !isAvailable;
+    setIsAvailable(nextAvailability);
+    setProfile({ ...profile, available: nextAvailability });
+    const { error } = await supabase.from("profiles").update({ is_available: nextAvailability }).eq("id", profile.id);
+    if (error) {
+      setIsAvailable(!nextAvailability);
+      setProfile({ ...profile, available: !nextAvailability });
+      notify(`No se pudo actualizar tu disponibilidad: ${error.message}`);
+    }
   };
-  const updateServiceProgress = (serviceId: string) => setState((current) => advanceService(current, serviceId));
-  const confirmCompletion = (serviceId: string) => {
+
+  const sendOffer = async (request: ServiceRequest, price: number, message: string) => {
+    if (!supabase || !profile || profile.role !== "technician") return;
+    const { error } = await supabase.from("offers").insert({
+      request_id: request.id,
+      technician_id: profile.id,
+      price_cop: price,
+      message,
+    });
+    if (error) { notify(`No se pudo enviar la propuesta: ${error.message}`); return; }
+    setOfferRequest(null);
+    notify(price === request.budget ? "Te postulaste por el presupuesto del cliente" : "Tu contraoferta fue enviada al cliente");
+  };
+  const openOffer = (request: ServiceRequest) => { if (!isAvailable) { notify("Activa tu disponibilidad para enviar una propuesta"); return; } setOfferRequest(request); };
+  const publishRequest = async (input: Omit<ServiceRequest, "id" | "clientId" | "status" | "createdAt">) => {
+    if (!supabase || !profile || profile.role !== "client") return;
+    const requestId = crypto.randomUUID();
+    let photoPaths: string[] = [];
+    try {
+      photoPaths = await uploadRequestPhotos(supabase, profile.id, requestId, input.supportPhotos ?? []);
+      const { error } = await supabase.rpc("publish_marketplace_request", {
+        p_request_id: requestId,
+        p_category: input.category,
+        p_title: input.title,
+        p_description: input.description,
+        p_sector: input.sector,
+        p_budget_cop: input.budget,
+        p_payment_method: input.paymentMethod,
+        p_desired_date: input.desiredDate,
+        p_exact_address: input.exactAddress ?? "",
+        p_photo_paths: photoPaths,
+      });
+      if (error) throw error;
+      setCreateRequestOpen(false);
+      notify("Solicitud publicada en tiempo real para técnicos cercanos.");
+    } catch (error) {
+      if (photoPaths.length) await supabase.storage.from("request-photos").remove(photoPaths);
+      notify(error instanceof Error ? `No se pudo publicar: ${error.message}` : "No se pudo publicar la solicitud.");
+    }
+  };
+  const chooseOffer = async (requestId: string, offerId: string) => {
+    if (!supabase) return;
+    const { data, error } = await supabase.rpc("select_service_offer", { p_request_id: requestId, p_offer_id: offerId });
+    if (error) { notify(`No se pudo seleccionar: ${error.message}`); return; }
+    setDetailRequest(null);
+    notify(data ? "Técnico seleccionado. Servicio asignado." : "Selección guardada. El técnico debe recargar saldo para asignar el servicio.");
+  };
+  const cancelSelectedService = async (serviceId: string) => {
+    if (!supabase) return;
+    const { error } = await supabase.rpc("cancel_marketplace_service", { p_service_id: serviceId });
+    if (error) { notify(`No se pudo cancelar: ${error.message}`); return; }
+    setDetailService(null);
+    notify("Servicio cancelado; si era en efectivo, la comisión se revirtió al saldo.");
+  };
+  const recharge = () => notify("Las recargas PSE/Nequi quedarán habilitadas al integrar la pasarela de pagos.");
+  const updateServiceProgress = async (serviceId: string) => {
+    if (!supabase) return;
+    const { error } = await supabase.rpc("advance_service", { p_service_id: serviceId });
+    if (error) notify(`No se pudo actualizar el servicio: ${error.message}`);
+  };
+  const confirmCompletion = async (serviceId: string) => {
     const service = state.services.find((item) => item.id === serviceId);
-    if (!service) return;
+    if (!service || !supabase) return;
     const confirmedByOther = (service.completionConfirmations ?? []).some((confirmation) => confirmation !== mode);
-    setState((current) => confirmServiceCompletion(current, serviceId, mode));
+    const { error } = await supabase.rpc("confirm_service_completion", { p_service_id: serviceId });
+    if (error) { notify(`No se pudo confirmar: ${error.message}`); return; }
     notify(confirmedByOther ? service.paymentMethod === "digital" ? "Trabajo confirmado. Falta completar el pago digital." : "Servicio confirmado y finalizado." : "Confirmación guardada. Falta que la otra parte confirme.");
   };
-  const payDigitalService = (serviceId: string) => { setState((current) => completeDigitalPayment(current, serviceId)); notify("Pago de prueba completado. Servicio finalizado."); };
+  const payDigitalService = async (serviceId: string) => {
+    if (!supabase) return;
+    const { error } = await supabase.rpc("simulate_digital_payment", { p_service_id: serviceId });
+    if (error) { notify(`No se pudo confirmar el pago de prueba: ${error.message}`); return; }
+    notify("Pago digital simulado. La pasarela real aún no está conectada.");
+  };
   const updateLocation = () => {
     if (!navigator.geolocation) { setLocationError("Este navegador no permite obtener la ubicación. Elige un sector aproximado."); return; }
     if (!window.isSecureContext) { setLocationError("Para usar el GPS, abre la app por HTTPS y permite el acceso a la ubicación en el navegador."); return; }
@@ -417,14 +522,24 @@ export default function MarketplaceApp({ mode }: { mode: Mode }) {
   };
   const updateManualSector = (sector: string) => { setManualSector(sector); setRadarOrigin(locationForSector(sector)); setLocationLabel(`${sector} · ubicación aproximada`); setLocationError(""); };
 
+  if (!supabase || !isSupabaseConfigured()) return <SupabaseAuthPanel mode={mode} configured={false} />;
+  if (authLoading) return <div className="flex min-h-screen items-center justify-center bg-[#f7f8fa] text-sm text-[#6f8178]">Conectando con tu cuenta…</div>;
+  if (!authUserId) return <SupabaseAuthPanel mode={mode} configured />;
+  if (profileError && !profile) return <div className="flex min-h-screen items-center justify-center bg-[#f7f8fa] px-5"><div role="alert" className="max-w-lg rounded-2xl border border-[#eadfbd] bg-white p-6 text-sm leading-6 text-[#7b6840]">No pudimos cargar tu perfil. Revisa que la migración de Supabase esté aplicada: {profileError}</div></div>;
+  if (!profile) return <div className="flex min-h-screen items-center justify-center bg-[#f7f8fa] text-sm text-[#6f8178]">Preparando tu perfil…</div>;
+  if (profile.role !== mode) return <main className="flex min-h-screen items-center justify-center bg-[#f7f8fa] px-5"><section className="max-w-md rounded-2xl border border-[#e3e8ec] bg-white p-7 text-center"><h1 className="text-xl font-semibold">Esta cuenta es de {profile.role === "client" ? "cliente" : "técnico"}</h1><p className="mt-2 text-sm text-[#7b8985]">Abre el espacio correspondiente para continuar con tu cuenta.</p><Link className="mt-5 inline-flex rounded-xl bg-[#19242d] px-4 py-3 text-sm font-semibold text-white" href={profile.role === "client" ? "/cliente" : "/tecnico"}>Ir a mi espacio</Link><button type="button" onClick={() => { void supabase.auth.signOut(); }} className="mt-4 block w-full text-xs font-semibold text-[#4d69d8]">Cerrar sesión</button></section></main>;
+  if (stateLoading && state.requests.length === 0) return <div className="flex min-h-screen items-center justify-center bg-[#f7f8fa] text-sm text-[#6f8178]">Cargando solicitudes y servicios…</div>;
+  if (stateError && state.requests.length === 0 && state.services.length === 0) return <main className="flex min-h-screen items-center justify-center bg-[#f7f8fa] px-5"><div role="alert" className="max-w-lg rounded-2xl border border-[#eadfbd] bg-white p-6 text-sm leading-6 text-[#7b6840]">Supabase no pudo cargar los datos: {stateError}</div></main>;
+
   const navItems = mode === "technician" ? technicianNav : clientNav;
   const currentNav = navItems.some((item) => item.label === activeNav) ? activeNav : mode === "technician" ? "Radar" : "Inicio";
 
-  return <main className="min-h-screen bg-[#f7f8fa] text-[#19242d]"><div className="flex min-h-screen"><Sidebar mode={mode} activeNav={currentNav} onNavChange={setActiveNav} /><section className="min-w-0 flex-1"><header className="flex h-[76px] items-center justify-between border-b border-[#e7ece9] bg-[#fbfcfe]/90 px-5 backdrop-blur md:px-8 xl:px-11"><div className="flex items-center gap-3 lg:hidden"><BrandMark compact /><span className="text-[10px] font-semibold text-[#64756e]">{mode === "technician" ? "Espacio técnico" : "Espacio cliente"}</span></div><div className="relative hidden w-full max-w-[340px] md:block"><Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9ba7a2]" /><input aria-label="Buscar" placeholder="Buscar servicios, técnicos..." className="h-10 w-full rounded-xl border border-[#e5ebe7] bg-white pl-10 pr-4 text-xs text-[#19242d] outline-none transition placeholder:text-[#a8b3af] focus:border-[#8fa4ee] focus:ring-4 focus:ring-[#4d69d8]/10" /></div><div className="ml-auto flex items-center gap-3 md:gap-5"><div className="text-right"><p className="hidden text-[10px] font-semibold uppercase tracking-[0.12em] text-[#87938d]">{mode === "technician" ? "Espacio del técnico" : "Espacio del cliente"}</p><Link href={mode === "technician" ? "/cliente" : "/tecnico"} aria-label={mode === "technician" ? "Cambiar al espacio del cliente" : "Cambiar al espacio del técnico"} className="text-[11px] font-semibold text-[#4d69d8] transition hover:text-[#344db5]"><span className="hidden md:inline">Cambiar a </span>{mode === "technician" ? "cliente" : "técnico"} <span aria-hidden="true">→</span></Link></div><button type="button" aria-label="Notificaciones" className="relative rounded-xl p-2 text-[#81908a] transition hover:bg-[#f1f3f8] hover:text-[#19242d]"><Bell size={18} /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#e58b62] ring-2 ring-[#fbfcfe]" /></button><div className="hidden h-8 w-px bg-[#e5ebe7] sm:block" /><button type="button" className="flex items-center gap-2"><div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#dce4ff] text-xs font-bold text-[#4f65a5]">CR</div><div className="hidden text-left sm:block"><p className="text-[11px] font-semibold text-[#314f49]">Camilo Restrepo</p><p className="text-[10px] text-[#9aa7a2]">{mode === "technician" ? "Técnico verificado" : "Cliente"}</p></div><ChevronDown size={14} className="hidden text-[#98a49f] sm:block" /></button></div></header><div className="mx-auto max-w-[1450px] px-5 py-8 md:px-8 xl:px-11">{mode === "client" ? <ClientDashboard activeNav={currentNav} requests={clientRequests} services={clientServices} state={state} onPublish={() => setCreateRequestOpen(true)} onOpenRequest={setDetailRequest} onOpenService={setDetailService} /> : <TechnicianDashboard activeNav={currentNav} requests={visibleRequests} state={state} offerCount={offerCount} offeredIds={state.offers.filter((offer) => offer.technicianId === currentTechnician.id).map((offer) => offer.requestId)} onFilter={setFilter} filter={filter} sortBy={sortBy} onSortBy={setSortBy} onOffer={openOffer} isAvailable={isAvailable} onToggleAvailability={() => setIsAvailable((available) => !available)} locationLabel={locationLabel} locationError={locationError} onLocate={updateLocation} onSectorChange={updateManualSector} manualSector={manualSector} center={radarOrigin} onOpenRequest={setDetailRequest} onOpenService={setDetailService} onRecharge={recharge} />}</div></section></div>{toast && <div role="status" className="fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-[#19242d] px-4 py-3 text-xs font-semibold text-white shadow-xl"><Check size={15} className="text-[#4d69d8]" />{toast}</div>}{offerRequest && mode === "technician" && <OfferModal request={offerRequest} alreadyOffered={state.offers.some((offer) => offer.requestId === offerRequest.id && offer.technicianId === currentTechnician.id)} onClose={() => setOfferRequest(null)} onSent={(price, message) => sendOffer(offerRequest, price, message)} />}{createRequestOpen && mode === "client" && <CreateRequestModal onClose={() => setCreateRequestOpen(false)} onCreate={publishRequest} />}{detailRequest && mode === "client" && <OffersModal request={detailRequest} offers={state.offers.filter((offer) => offer.requestId === detailRequest.id)} selectedService={state.services.find((service) => service.requestId === detailRequest.id)} onClose={() => setDetailRequest(null)} onSelect={(offerId) => chooseOffer(detailRequest.id, offerId)} />}{detailRequest && mode === "technician" && <RequestDetailModal request={detailRequest} onClose={() => setDetailRequest(null)} onOffer={() => { setDetailRequest(null); openOffer(detailRequest); }} />}{detailService && <ServiceModal service={state.services.find((service) => service.id === detailService.id) ?? detailService} request={state.requests.find((request) => request.id === detailService.requestId)} onClose={() => setDetailService(null)} onCancel={() => cancelSelectedService(detailService.id)} role={mode} onAdvance={() => updateServiceProgress(detailService.id)} onConfirm={() => confirmCompletion(detailService.id)} onPay={() => payDigitalService(detailService.id)} />}</main>;
+  return <main className="min-h-screen bg-[#f7f8fa] text-[#19242d]"><div className="flex min-h-screen"><Sidebar mode={mode} activeNav={currentNav} onNavChange={setActiveNav} /><section className="min-w-0 flex-1"><header className="flex h-[76px] items-center justify-between border-b border-[#e7ece9] bg-[#fbfcfe]/90 px-5 backdrop-blur md:px-8 xl:px-11"><div className="flex items-center gap-3 lg:hidden"><BrandMark compact /><span className="text-[10px] font-semibold text-[#64756e]">{mode === "technician" ? "Espacio técnico" : "Espacio cliente"}</span></div><div className="relative hidden w-full max-w-[340px] md:block"><Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9ba7a2]" /><input aria-label="Buscar" placeholder="Buscar servicios, técnicos..." className="h-10 w-full rounded-xl border border-[#e5ebe7] bg-white pl-10 pr-4 text-xs text-[#19242d] outline-none transition placeholder:text-[#a8b3af] focus:border-[#8fa4ee] focus:ring-4 focus:ring-[#4d69d8]/10" /></div><div className="ml-auto flex items-center gap-3 md:gap-5"><span className="hidden items-center gap-1.5 text-[10px] font-medium text-[#7b8985] sm:flex"><span className={`h-1.5 w-1.5 rounded-full ${realtimeConnected ? "bg-[#55aa69]" : "bg-[#d0a64b]"}`} />{realtimeConnected ? "En vivo" : "Reconectando"}</span><div className="text-right"><p className="hidden text-[10px] font-semibold uppercase tracking-[0.12em] text-[#87938d]">{mode === "technician" ? "Espacio del técnico" : "Espacio del cliente"}</p><Link href={mode === "technician" ? "/cliente" : "/tecnico"} aria-label={mode === "technician" ? "Cambiar al espacio del cliente" : "Cambiar al espacio del técnico"} className="text-[11px] font-semibold text-[#4d69d8] transition hover:text-[#344db5]"><span className="hidden md:inline">Cambiar a </span>{mode === "technician" ? "cliente" : "técnico"} <span aria-hidden="true">→</span></Link></div><button type="button" aria-label="Notificaciones" className="relative rounded-xl p-2 text-[#81908a] transition hover:bg-[#f1f3f8] hover:text-[#19242d]"><Bell size={18} /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#e58b62] ring-2 ring-[#fbfcfe]" /></button><div className="hidden h-8 w-px bg-[#e5ebe7] sm:block" /><button type="button" onClick={() => { void supabase.auth.signOut(); }} className="flex items-center gap-2"><div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#dce4ff] text-xs font-bold text-[#4f65a5]">{profile.initials}</div><div className="hidden text-left sm:block"><p className="text-[11px] font-semibold text-[#314f49]">{profile.name}</p><p className="text-[10px] text-[#9aa7a2]">{profile.role === "technician" ? profile.verified ? "Técnico verificado" : "Técnico" : "Cliente"}</p></div><ChevronDown size={14} className="hidden text-[#98a49f] sm:block" /></button></div></header><div className="mx-auto max-w-[1450px] px-5 py-8 md:px-8 xl:px-11">{mode === "client" ? <ClientDashboard activeNav={currentNav} requests={clientRequests} services={clientServices} state={state} onPublish={() => setCreateRequestOpen(true)} onOpenRequest={setDetailRequest} onOpenService={setDetailService} /> : <TechnicianDashboard technicianId={profile.id} activeNav={currentNav} requests={visibleRequests} state={state} offerCount={offerCount} offeredIds={state.offers.filter((offer) => offer.technicianId === profile.id).map((offer) => offer.requestId)} onFilter={setFilter} filter={filter} sortBy={sortBy} onSortBy={setSortBy} onOffer={openOffer} isAvailable={isAvailable} onToggleAvailability={toggleAvailability} locationLabel={locationLabel} locationError={locationError} onLocate={updateLocation} onSectorChange={updateManualSector} manualSector={manualSector} center={radarOrigin} onOpenRequest={setDetailRequest} onOpenService={setDetailService} onRecharge={recharge} />}</div></section></div>{toast && <div role="status" className="fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-[#19242d] px-4 py-3 text-xs font-semibold text-white shadow-xl"><Check size={15} className="text-[#4d69d8]" />{toast}</div>}{offerRequest && mode === "technician" && <OfferModal request={offerRequest} alreadyOffered={state.offers.some((offer) => offer.requestId === offerRequest.id && offer.technicianId === profile.id)} onClose={() => setOfferRequest(null)} onSent={(price, message) => sendOffer(offerRequest, price, message)} />}{createRequestOpen && mode === "client" && <CreateRequestModal onClose={() => setCreateRequestOpen(false)} onCreate={publishRequest} />}{detailRequest && mode === "client" && <OffersModal request={detailRequest} offers={state.offers.filter((offer) => offer.requestId === detailRequest.id)} selectedService={state.services.find((service) => service.requestId === detailRequest.id)} onClose={() => setDetailRequest(null)} onSelect={(offerId) => chooseOffer(detailRequest.id, offerId)} />}{detailRequest && mode === "technician" && <RequestDetailModal request={detailRequest} onClose={() => setDetailRequest(null)} onOffer={() => { setDetailRequest(null); openOffer(detailRequest); }} />}{detailService && <ServiceModal service={state.services.find((service) => service.id === detailService.id) ?? detailService} request={state.requests.find((request) => request.id === detailService.requestId)} onClose={() => setDetailService(null)} onCancel={() => cancelSelectedService(detailService.id)} role={mode} onAdvance={() => updateServiceProgress(detailService.id)} onConfirm={() => confirmCompletion(detailService.id)} onPay={() => payDigitalService(detailService.id)} />}</main>;
 }
 
-function TechnicianDashboard({ activeNav, requests, state, offerCount, offeredIds, sortBy, onSortBy, onOffer, onOpenRequest, onOpenService, onRecharge, isAvailable, onToggleAvailability, locationLabel, locationError, onLocate, center }: {
+function TechnicianDashboard({ technicianId, activeNav, requests, state, offerCount, offeredIds, sortBy, onSortBy, onOffer, onOpenRequest, onOpenService, onRecharge, isAvailable, onToggleAvailability, locationLabel, locationError, onLocate, center }: {
   activeNav: string;
+  technicianId: string;
   requests: ServiceRequest[];
   state: MarketplaceState;
   offerCount: (requestId: string) => number;
@@ -447,7 +562,7 @@ function TechnicianDashboard({ activeNav, requests, state, offerCount, offeredId
   center: GeoPoint;
 }) {
   if (activeNav === "Mi saldo") return <div><PageHeading eyebrow="Tu economía" title="Mi saldo prepago" description="La comisión en efectivo se descuenta al asignar el servicio. Si se cancela, se devuelve completa." /><div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)]"><LedgerBalanceCard balance={state.walletBalance} onRecharge={onRecharge} /><TransactionList transactions={state.walletTransactions} /></div></div>;
-  if (activeNav === "Mis servicios") return <ServicesPanel services={state.services.filter((service) => service.technicianId === currentTechnician.id)} requests={state.requests} onOpen={onOpenService} role="technician" />;
+  if (activeNav === "Mis servicios") return <ServicesPanel services={state.services.filter((service) => service.technicianId === technicianId)} requests={state.requests} onOpen={onOpenService} role="technician" />;
   if (activeNav === "Mensajes") return <EmptyPanel title="Tus mensajes aparecerán aquí" text="Cuando un cliente responda una propuesta o necesite coordinar un detalle, la conversación estará disponible en este espacio." icon={MessageCircle} />;
 
   return (
@@ -509,18 +624,18 @@ function TechnicianDashboard({ activeNav, requests, state, offerCount, offeredId
         <aside className="space-y-5">
           <LedgerBalanceCard balance={state.walletBalance} onRecharge={onRecharge} />
           <div className="rounded-2xl border border-[#e7ece9] bg-white p-5 shadow-[0_8px_30px_rgba(39,65,60,0.035)]">
-            <div className="flex items-center justify-between"><h3 className="text-sm font-semibold text-[#19242d]">Servicios en curso</h3><span className="text-[11px] font-semibold text-[#4d69d8]">{state.services.filter((service) => service.technicianId === currentTechnician.id && !["completed", "cancelled"].includes(service.status)).length}</span></div>
-            <div className="mt-4 space-y-3">{state.services.filter((service) => service.technicianId === currentTechnician.id && !["completed", "cancelled"].includes(service.status)).slice(0, 3).map((service) => {
+            <div className="flex items-center justify-between"><h3 className="text-sm font-semibold text-[#19242d]">Servicios en curso</h3><span className="text-[11px] font-semibold text-[#4d69d8]">{state.services.filter((service) => service.technicianId === technicianId && !["completed", "cancelled"].includes(service.status)).length}</span></div>
+            <div className="mt-4 space-y-3">{state.services.filter((service) => service.technicianId === technicianId && !["completed", "cancelled"].includes(service.status)).slice(0, 3).map((service) => {
               const request = state.requests.find((item) => item.id === service.requestId);
               return <button key={service.id} type="button" onClick={() => onOpenService(service)} className="flex w-full items-start justify-between gap-3 border-t border-[#edf0f4] pt-3 text-left">
                 <span><span className="block text-xs font-semibold text-[#19242d]">{request?.title ?? "Servicio asignado"}</span><span className="mt-1 block text-[10px] text-[#84918c]">{request?.sector} · {statusLabel(service.status)}</span></span><ArrowUpRight size={15} className="mt-0.5 text-[#4d69d8]" />
               </button>;
             })}</div>
-            {state.services.every((service) => service.technicianId !== currentTechnician.id || ["completed", "cancelled"].includes(service.status)) && <p className="mt-3 text-[11px] leading-5 text-[#8b9893]">Cuando un cliente acepte una propuesta, podrás seguir el servicio desde aquí.</p>}
+            {state.services.every((service) => service.technicianId !== technicianId || ["completed", "cancelled"].includes(service.status)) && <p className="mt-3 text-[11px] leading-5 text-[#8b9893]">Cuando un cliente acepte una propuesta, podrás seguir el servicio desde aquí.</p>}
           </div>
           <div className="rounded-2xl border border-[#e7ece9] bg-[#f8faff] p-5">
             <div className="flex items-center gap-2 text-[#4d69d8]"><Clock3 size={16} /><h3 className="text-sm font-semibold text-[#19242d]">Propuestas pendientes</h3></div>
-            <p className="mt-2 text-[11px] leading-5 text-[#7e8f88]">{state.offers.filter((offer) => offer.technicianId === currentTechnician.id && offer.status === "pending").length} propuestas esperando respuesta del cliente. Recibirás una notificación al cambiar el estado.</p>
+            <p className="mt-2 text-[11px] leading-5 text-[#7e8f88]">{state.offers.filter((offer) => offer.technicianId === technicianId && offer.status === "pending").length} propuestas esperando respuesta del cliente. Recibirás una notificación al cambiar el estado.</p>
           </div>
         </aside>
       </div>

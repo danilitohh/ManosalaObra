@@ -21,6 +21,7 @@ export type User = {
   rating: number;
   completedServices: number;
   verified: boolean;
+  available?: boolean;
 };
 
 export type ServiceRequest = {
@@ -49,6 +50,7 @@ export type Offer = {
   message: string;
   status: OfferStatus;
   createdAt: string;
+  technician?: User;
 };
 
 export type Service = {

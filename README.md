@@ -1,4 +1,6 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+This is a Next.js app for the Manos a la Obra services marketplace.
+
+For Supabase Auth, database migrations, RLS, private photo storage, and Realtime setup, follow [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md).
 
 ## Getting Started
 
