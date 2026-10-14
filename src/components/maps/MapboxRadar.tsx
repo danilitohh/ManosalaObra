@@ -6,6 +6,7 @@ import type { ServiceRequest } from "@/lib/marketplace";
 
 type MapboxRadarProps = {
   requests: ServiceRequest[];
+  onOpenRequest: (request: ServiceRequest) => void;
 };
 
 type SectorCoordinate = {
@@ -36,7 +37,10 @@ function coordinateForRequest(request: ServiceRequest, index: number) {
   };
 }
 
-function createPopupContent(request: ServiceRequest) {
+function createPopupContent(
+  request: ServiceRequest,
+  onOpenRequest: (request: ServiceRequest) => void,
+) {
   const content = document.createElement("div");
   content.className = "mapbox-request-popup";
 
@@ -46,7 +50,16 @@ function createPopupContent(request: ServiceRequest) {
   const details = document.createElement("span");
   details.textContent = `${request.sector} · ${request.distance}`;
 
-  content.append(title, details);
+  const openButton = document.createElement("button");
+  openButton.type = "button";
+  openButton.textContent = "Ver servicio";
+  openButton.setAttribute("aria-label", `Ver servicio: ${request.category} en ${request.sector}`);
+  openButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    onOpenRequest(request);
+  });
+
+  content.append(title, details, openButton);
   return content;
 }
 
@@ -54,6 +67,7 @@ function syncRequestMarkers(
   leaflet: typeof import("leaflet"),
   layer: Leaflet.LayerGroup,
   requests: ServiceRequest[],
+  onOpenRequest: (request: ServiceRequest) => void,
 ) {
   layer.clearLayers();
 
@@ -73,12 +87,12 @@ function syncRequestMarkers(
         icon,
         title: `${request.category} · ${request.sector}`,
       })
-      .bindPopup(createPopupContent(request))
+      .bindPopup(createPopupContent(request, onOpenRequest))
       .addTo(layer);
   });
 }
 
-export function MapboxRadar({ requests }: MapboxRadarProps) {
+export function MapboxRadar({ requests, onOpenRequest }: MapboxRadarProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Leaflet.Map | null>(null);
   const markersLayerRef = useRef<Leaflet.LayerGroup | null>(null);
@@ -141,7 +155,7 @@ export function MapboxRadar({ requests }: MapboxRadarProps) {
       const markersLayer = leaflet.layerGroup().addTo(map);
       markersLayerRef.current = markersLayer;
       mapRef.current = map;
-      syncRequestMarkers(leaflet, markersLayer, requestsRef.current);
+      syncRequestMarkers(leaflet, markersLayer, requestsRef.current, onOpenRequest);
 
       requestAnimationFrame(() => map?.invalidateSize());
     });
@@ -155,14 +169,14 @@ export function MapboxRadar({ requests }: MapboxRadarProps) {
       leafletRef.current = null;
       map = null;
     };
-  }, [token]);
+  }, [onOpenRequest, token]);
 
   useEffect(() => {
     const leaflet = leafletRef.current;
     const layer = markersLayerRef.current;
 
-    if (leaflet && layer) syncRequestMarkers(leaflet, layer, requests);
-  }, [requestKey, requests]);
+    if (leaflet && layer) syncRequestMarkers(leaflet, layer, requests, onOpenRequest);
+  }, [onOpenRequest, requestKey, requests]);
 
   if (!token) {
     return (

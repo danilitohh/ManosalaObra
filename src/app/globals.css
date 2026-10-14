@@ -87,6 +87,24 @@ button {
   font-size: 10px;
 }
 
+.mapbox-request-popup button {
+  justify-self: start;
+  margin-top: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #4d69d8;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.mapbox-request-popup button:hover {
+  color: #344fae;
+  text-decoration: underline;
+}
+
 .leaflet-control-zoom {
   overflow: hidden;
   border: 1px solid rgb(220 227 239 / 90%);
