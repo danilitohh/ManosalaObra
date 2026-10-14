@@ -36,6 +36,13 @@ button {
   cursor: pointer;
 }
 
+.lucide {
+  flex-shrink: 0;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
 .input-style {
   width: 100%;
   border: 1px solid #e5ebe6;
