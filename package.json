@@ -10,8 +10,8 @@
   },
   "dependencies": {
     "@heroui/react": "^3.2.6",
+    "leaflet": "^1.9.4",
     "lucide-react": "^1.55.0",
-    "mapbox-gl": "^3.33.0",
     "motion": "^14.1.0",
     "next": "16.4.0",
     "react": "19.3.0",
@@ -20,6 +20,7 @@
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
+    "@types/leaflet": "^1.9.22",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

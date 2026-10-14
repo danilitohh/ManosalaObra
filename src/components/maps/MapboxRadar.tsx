@@ -1,7 +1,7 @@
 "use client";
 
-import * as mapboxgl from "mapbox-gl/esm";
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
+import type * as Leaflet from "leaflet";
 import type { ServiceRequest } from "@/lib/marketplace";
 
 type MapboxRadarProps = {
@@ -26,73 +26,66 @@ const SECTOR_COORDINATES: Record<string, SectorCoordinate> = {
   Centro: { latitude: 6.251, longitude: -75.568 },
 };
 
-function createRadiusPolygon(center: SectorCoordinate, radiusInKilometers: number) {
-  const points = Array.from({ length: 65 }, (_, index) => {
-    const angle = (index / 64) * Math.PI * 2;
-    const latitudeDelta = (radiusInKilometers / 111.32) * Math.sin(angle);
-    const longitudeDelta =
-      (radiusInKilometers / (111.32 * Math.cos((center.latitude * Math.PI) / 180))) *
-      Math.cos(angle);
-
-    return [center.longitude + longitudeDelta, center.latitude + latitudeDelta];
-  });
-
-  return {
-    type: "Feature" as const,
-    properties: {},
-    geometry: {
-      type: "Polygon" as const,
-      coordinates: [points],
-    },
-  };
-}
-
 function coordinateForRequest(request: ServiceRequest, index: number) {
   const sector = SECTOR_COORDINATES[request.sector] ?? MEDELLIN_CENTER;
   const offset = ((index % 3) - 1) * 0.0025;
 
   return {
-    longitude: sector.longitude + offset,
     latitude: sector.latitude + offset * 0.45,
+    longitude: sector.longitude + offset,
   };
 }
 
-function staticMapUrl(token: string) {
-  const center = `${MEDELLIN_CENTER.longitude},${MEDELLIN_CENTER.latitude},11.35,0`;
-  return `https://api.mapbox.com/styles/v1/mapbox/light-v11/static/${center}/800x450?access_token=${encodeURIComponent(token)}`;
+function createPopupContent(request: ServiceRequest) {
+  const content = document.createElement("div");
+  content.className = "mapbox-request-popup";
+
+  const title = document.createElement("strong");
+  title.textContent = request.category;
+
+  const details = document.createElement("span");
+  details.textContent = `${request.sector} · ${request.distance}`;
+
+  content.append(title, details);
+  return content;
+}
+
+function syncRequestMarkers(
+  leaflet: typeof import("leaflet"),
+  layer: Leaflet.LayerGroup,
+  requests: ServiceRequest[],
+) {
+  layer.clearLayers();
+
+  const icon = leaflet.divIcon({
+    className: "mapbox-request-icon",
+    html: '<span class="leaflet-request-dot" aria-hidden="true"></span>',
+    iconAnchor: [12, 12],
+    iconSize: [24, 24],
+  });
+
+  requests.forEach((request, index) => {
+    const coordinate = coordinateForRequest(request, index);
+
+    leaflet
+      .marker([coordinate.latitude, coordinate.longitude], {
+        alt: `Solicitud de ${request.category} en ${request.sector}`,
+        icon,
+        title: `${request.category} · ${request.sector}`,
+      })
+      .bindPopup(createPopupContent(request))
+      .addTo(layer);
+  });
 }
 
 export function MapboxRadar({ requests }: MapboxRadarProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<mapboxgl.Map | null>(null);
-  const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const mapRef = useRef<Leaflet.Map | null>(null);
+  const markersLayerRef = useRef<Leaflet.LayerGroup | null>(null);
+  const leafletRef = useRef<typeof import("leaflet") | null>(null);
   const requestsRef = useRef(requests);
-  const mapReadyRef = useRef(false);
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
   const requestKey = requests.map((request) => `${request.id}:${request.sector}`).join("|");
-
-  const syncMarkers = useCallback((map: mapboxgl.Map) => {
-    markersRef.current.forEach((marker) => marker.remove());
-    markersRef.current = requestsRef.current.map((request, index) => {
-      const markerElement = document.createElement("button");
-      markerElement.type = "button";
-      markerElement.className = "mapbox-request-marker";
-      markerElement.setAttribute("aria-label", `Solicitud de ${request.category} en ${request.sector}`);
-
-      const popupContent = document.createElement("div");
-      popupContent.className = "mapbox-request-popup";
-      const title = document.createElement("strong");
-      title.textContent = request.category;
-      const details = document.createElement("span");
-      details.textContent = `${request.sector} · ${request.distance}`;
-      popupContent.append(title, details);
-
-      return new mapboxgl.Marker({ element: markerElement, anchor: "center" })
-        .setLngLat([coordinateForRequest(request, index).longitude, coordinateForRequest(request, index).latitude])
-        .setPopup(new mapboxgl.Popup({ closeButton: false, offset: 12 }).setDOMContent(popupContent))
-        .addTo(map);
-    });
-  }, []);
 
   useEffect(() => {
     requestsRef.current = requests;
@@ -101,77 +94,75 @@ export function MapboxRadar({ requests }: MapboxRadarProps) {
   useEffect(() => {
     if (!token || !mapContainerRef.current) return;
 
-    if (!mapboxgl.supported()) {
-      return;
-    }
+    let cancelled = false;
+    let map: Leaflet.Map | null = null;
 
-    let map: mapboxgl.Map;
+    void import("leaflet").then((leaflet) => {
+      if (cancelled || !mapContainerRef.current) return;
 
-    try {
-      map = new mapboxgl.Map({
-        accessToken: token,
-        center: [MEDELLIN_CENTER.longitude, MEDELLIN_CENTER.latitude],
-        container: mapContainerRef.current,
-        cooperativeGestures: true,
-        dragRotate: false,
+      leafletRef.current = leaflet;
+      map = leaflet.map(mapContainerRef.current, {
+        center: [MEDELLIN_CENTER.latitude, MEDELLIN_CENTER.longitude],
+        dragging: true,
+        maxZoom: 18,
         minZoom: 10,
-        style: "mapbox://styles/mapbox/light-v11",
-        zoom: 11.35,
+        scrollWheelZoom: true,
+        zoom: 12,
+        zoomControl: false,
       });
-    } catch {
-      mapContainerRef.current.classList.add("hidden");
-      return;
-    }
 
-    mapRef.current = map;
-    map.on("error", (event) => {
-      if (event.error?.message.includes("WebGL")) {
-        map.getContainer().classList.add("hidden");
-      }
-    });
-    map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
-    map.addControl(
-      new mapboxgl.GeolocateControl({
-        positionOptions: { enableHighAccuracy: false },
-        showUserHeading: false,
-        trackUserLocation: false,
-      }),
-      "top-right",
-    );
+      leaflet
+        .tileLayer(
+          `https://api.mapbox.com/styles/v1/mapbox/light-v11/tiles/512/{z}/{x}/{y}?access_token=${encodeURIComponent(token)}`,
+          {
+            attribution:
+              '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+            maxZoom: 18,
+            minZoom: 10,
+            tileSize: 512,
+            zoomOffset: -1,
+          },
+        )
+        .addTo(map);
 
-    map.once("load", () => {
-      map.addSource("service-radius", {
-        data: createRadiusPolygon(MEDELLIN_CENTER, 5),
-        type: "geojson",
-      });
-      map.addLayer({
-        id: "service-radius-fill",
-        paint: { "fill-color": "#4d69d8", "fill-opacity": 0.09 },
-        source: "service-radius",
-        type: "fill",
-      });
-      map.addLayer({
-        id: "service-radius-line",
-        paint: { "line-color": "#4d69d8", "line-opacity": 0.48, "line-width": 1.5 },
-        source: "service-radius",
-        type: "line",
-      });
-      mapReadyRef.current = true;
-      syncMarkers(map);
+      leaflet.control.zoom({ position: "topright" }).addTo(map);
+
+      leaflet
+        .circle([MEDELLIN_CENTER.latitude, MEDELLIN_CENTER.longitude], {
+          color: "#4d69d8",
+          fillColor: "#4d69d8",
+          fillOpacity: 0.09,
+          opacity: 0.48,
+          radius: 5000,
+          weight: 1.5,
+        })
+        .addTo(map);
+
+      const markersLayer = leaflet.layerGroup().addTo(map);
+      markersLayerRef.current = markersLayer;
+      mapRef.current = map;
+      syncRequestMarkers(leaflet, markersLayer, requestsRef.current);
+
+      requestAnimationFrame(() => map?.invalidateSize());
     });
 
     return () => {
-      mapReadyRef.current = false;
-      markersRef.current.forEach((marker) => marker.remove());
-      markersRef.current = [];
-      map.remove();
+      cancelled = true;
+      markersLayerRef.current?.clearLayers();
+      markersLayerRef.current = null;
+      mapRef.current?.remove();
       mapRef.current = null;
+      leafletRef.current = null;
+      map = null;
     };
-  }, [syncMarkers, token]);
+  }, [token]);
 
   useEffect(() => {
-    if (mapReadyRef.current && mapRef.current) syncMarkers(mapRef.current);
-  }, [requestKey, syncMarkers]);
+    const leaflet = leafletRef.current;
+    const layer = markersLayerRef.current;
+
+    if (leaflet && layer) syncRequestMarkers(leaflet, layer, requests);
+  }, [requestKey, requests]);
 
   if (!token) {
     return (
@@ -187,16 +178,12 @@ export function MapboxRadar({ requests }: MapboxRadarProps) {
   }
 
   return (
-    <section className="relative min-h-[300px] overflow-hidden rounded-2xl border border-[#dce3ef] bg-[#e8edf6] shadow-[0_10px_28px_rgba(40,52,68,0.06)]" aria-label="Radar de solicitudes cercanas">
-      {/* Mapbox GL JS is used when WebGL is available; the static image keeps the radar visible in embedded browsers without WebGL. */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={staticMapUrl(token)}
-        alt="Mapa de Medellín con el radio de servicio aproximado"
-        className="absolute inset-0 h-full w-full object-cover"
-      />
-      <div ref={mapContainerRef} className="absolute inset-0" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-4">
+    <section
+      className="relative min-h-[300px] overflow-hidden rounded-2xl border border-[#dce3ef] bg-[#e8edf6] shadow-[0_10px_28px_rgba(40,52,68,0.06)]"
+      aria-label="Radar de solicitudes cercanas"
+    >
+      <div ref={mapContainerRef} className="absolute inset-0 z-0" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-[500] flex items-start justify-between p-4">
         <div className="rounded-full border border-white/70 bg-white/90 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#4d69d8] shadow-sm backdrop-blur-sm">
           Radar activo · 5 km
         </div>
@@ -204,15 +191,12 @@ export function MapboxRadar({ requests }: MapboxRadarProps) {
           Ubicación aproximada
         </div>
       </div>
-      <div className="pointer-events-none absolute bottom-4 left-4 rounded-xl border border-white/70 bg-white/90 px-3 py-2.5 shadow-sm backdrop-blur-sm">
+      <div className="pointer-events-none absolute bottom-4 left-4 z-[500] rounded-xl border border-white/70 bg-white/90 px-3 py-2.5 shadow-sm backdrop-blur-sm">
         <div className="flex items-center gap-2 text-[11px] font-semibold text-[#19242d]">
           <span className="h-2.5 w-2.5 rounded-full bg-[#4d69d8] ring-4 ring-[#4d69d8]/15" />
           {requests.length} solicitudes disponibles
         </div>
         <p className="mt-1 text-[10px] text-[#778592]">La dirección exacta se revela al asignar.</p>
-      </div>
-      <div className="pointer-events-none absolute bottom-2 right-2 rounded bg-white/80 px-1.5 py-0.5 text-[8px] text-[#657482] shadow-sm">
-        © Mapbox · © OpenStreetMap
       </div>
     </section>
   );
