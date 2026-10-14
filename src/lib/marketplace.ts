@@ -1,8 +1,17 @@
 export type UserRole = "client" | "technician";
 export type PaymentMethod = "cash" | "digital";
-export type RequestStatus = "published" | "selected" | "awaiting_balance" | "assigned" | "in_progress" | "completed" | "cancelled";
+export type RequestStatus = "published" | "selected" | "awaiting_balance" | "assigned" | "en_route" | "in_progress" | "payment_pending" | "completed" | "cancelled";
 export type OfferStatus = "pending" | "accepted" | "rejected";
-export type ServiceStatus = "assigned" | "in_progress" | "completed" | "cancelled" | "payment_pending";
+export type ServiceStatus = "assigned" | "en_route" | "in_progress" | "completion_pending" | "completed" | "cancelled" | "payment_pending";
+export type GeoPoint = { latitude: number; longitude: number };
+
+export const SECTOR_COORDINATES: Record<string, GeoPoint> = {
+  Belén: { latitude: 6.229, longitude: -75.603 },
+  Envigado: { latitude: 6.169, longitude: -75.591 },
+  Laureles: { latitude: 6.244, longitude: -75.591 },
+  "El Poblado": { latitude: 6.208, longitude: -75.568 },
+  Centro: { latitude: 6.251, longitude: -75.568 },
+};
 
 export type User = {
   id: string;
@@ -22,6 +31,9 @@ export type ServiceRequest = {
   description: string;
   sector: string;
   distance: string;
+  exactAddress?: string;
+  supportPhotos?: string[];
+  selectedOfferId?: string;
   budget: number;
   paymentMethod: PaymentMethod;
   desiredDate: string;
@@ -49,6 +61,7 @@ export type Service = {
   paymentMethod: PaymentMethod;
   status: ServiceStatus;
   addressRevealed: boolean;
+  completionConfirmations?: UserRole[];
   createdAt: string;
 };
 
@@ -160,7 +173,22 @@ export const initialMarketplaceState: MarketplaceState = {
 export const commissionFor = (price: number) => Math.round(price * 0.1);
 export const technicianPayoutFor = (price: number) => price - commissionFor(price);
 
-export function createRequest(input: Omit<ServiceRequest, "id" | "clientId" | "status" | "createdAt">): ServiceRequest {
+export function distanceBetween(origin: GeoPoint, destination: GeoPoint): number {
+  const radians = (degrees: number) => degrees * (Math.PI / 180);
+  const latitudeDelta = radians(destination.latitude - origin.latitude);
+  const longitudeDelta = radians(destination.longitude - origin.longitude);
+  const latitudeOrigin = radians(origin.latitude);
+  const latitudeDestination = radians(destination.latitude);
+  const haversine = Math.sin(latitudeDelta / 2) ** 2
+    + Math.cos(latitudeOrigin) * Math.cos(latitudeDestination) * Math.sin(longitudeDelta / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+}
+
+export function locationForSector(sector: string): GeoPoint {
+  return SECTOR_COORDINATES[sector] ?? { latitude: 6.235, longitude: -75.575 };
+}
+
+export function createRequest(input: Omit<ServiceRequest, "id" | "clientId" | "status" | "createdAt" | "selectedOfferId">): ServiceRequest {
   return {
     ...input,
     id: `request-${Date.now()}`,
@@ -185,7 +213,8 @@ export function createOffer(requestId: string, price: number, message: string): 
 export function selectOffer(state: MarketplaceState, requestId: string, offerId: string): MarketplaceState {
   const request = state.requests.find((item) => item.id === requestId);
   const offer = state.offers.find((item) => item.id === offerId && item.requestId === requestId);
-  if (!request || !offer) return state;
+  if (!request || !offer || !["published", "awaiting_balance"].includes(request.status)) return state;
+  if (state.services.some((service) => service.requestId === requestId)) return state;
 
   const commission = commissionFor(offer.price);
   const canAssign = request.paymentMethod === "digital" || state.walletBalance >= commission;
@@ -194,7 +223,7 @@ export function selectOffer(state: MarketplaceState, requestId: string, offerId:
   if (!canAssign) {
     return {
       ...state,
-      requests: state.requests.map((item) => item.id === requestId ? { ...item, status: nextStatus } : item),
+      requests: state.requests.map((item) => item.id === requestId ? { ...item, status: nextStatus, selectedOfferId: offerId } : item),
       offers: state.offers.map((item) => item.id === offerId ? { ...item, status: "accepted" } : item),
     };
   }
@@ -222,11 +251,50 @@ export function selectOffer(state: MarketplaceState, requestId: string, offerId:
 
   return {
     ...state,
-    requests: state.requests.map((item) => item.id === requestId ? { ...item, status: nextStatus } : item),
+    requests: state.requests.map((item) => item.id === requestId ? { ...item, status: nextStatus, selectedOfferId: offerId } : item),
     offers: state.offers.map((item) => item.requestId === requestId ? { ...item, status: item.id === offerId ? "accepted" : "rejected" } : item),
     services: [...state.services, service],
     walletBalance: request.paymentMethod === "cash" ? state.walletBalance - commission : state.walletBalance,
     walletTransactions: cashTransaction ? [cashTransaction, ...state.walletTransactions] : state.walletTransactions,
+  };
+}
+
+export function advanceService(state: MarketplaceState, serviceId: string): MarketplaceState {
+  const service = state.services.find((item) => item.id === serviceId);
+  if (!service) return state;
+  const nextStatus = service.status === "assigned" ? "en_route" : service.status === "en_route" ? "in_progress" : null;
+  if (!nextStatus) return state;
+  const requestStatus: RequestStatus = nextStatus;
+  return {
+    ...state,
+    services: state.services.map((item) => item.id === serviceId ? { ...item, status: nextStatus } : item),
+    requests: state.requests.map((item) => item.id === service.requestId ? { ...item, status: requestStatus } : item),
+  };
+}
+
+export function confirmServiceCompletion(state: MarketplaceState, serviceId: string, role: UserRole): MarketplaceState {
+  const service = state.services.find((item) => item.id === serviceId);
+  if (!service || !["in_progress", "completion_pending"].includes(service.status)) return state;
+  const confirmations = Array.from(new Set([...(service.completionConfirmations ?? []), role]));
+  const bothConfirmed = confirmations.includes("client") && confirmations.includes("technician");
+  const status: ServiceStatus = bothConfirmed
+    ? service.paymentMethod === "digital" ? "payment_pending" : "completed"
+    : "completion_pending";
+  const requestStatus: RequestStatus = status === "payment_pending" ? "payment_pending" : status === "completed" ? "completed" : "in_progress";
+  return {
+    ...state,
+    services: state.services.map((item) => item.id === serviceId ? { ...item, status, completionConfirmations: confirmations } : item),
+    requests: state.requests.map((item) => item.id === service.requestId ? { ...item, status: requestStatus } : item),
+  };
+}
+
+export function completeDigitalPayment(state: MarketplaceState, serviceId: string): MarketplaceState {
+  const service = state.services.find((item) => item.id === serviceId);
+  if (!service || service.paymentMethod !== "digital" || service.status !== "payment_pending") return state;
+  return {
+    ...state,
+    services: state.services.map((item) => item.id === serviceId ? { ...item, status: "completed" } : item),
+    requests: state.requests.map((item) => item.id === service.requestId ? { ...item, status: "completed" } : item),
   };
 }
 

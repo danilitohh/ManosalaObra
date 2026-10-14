@@ -2,11 +2,13 @@
 
 import { useEffect, useRef } from "react";
 import type * as Leaflet from "leaflet";
-import type { ServiceRequest } from "@/lib/marketplace";
+import type { GeoPoint, ServiceRequest } from "@/lib/marketplace";
 
 type MapboxRadarProps = {
   requests: ServiceRequest[];
   onOpenRequest: (request: ServiceRequest) => void;
+  center: GeoPoint;
+  radiusKm: number;
 };
 
 type SectorCoordinate = {
@@ -27,9 +29,10 @@ const SECTOR_COORDINATES: Record<string, SectorCoordinate> = {
   Centro: { latitude: 6.251, longitude: -75.568 },
 };
 
-function coordinateForRequest(request: ServiceRequest, index: number) {
+function coordinateForRequest(request: ServiceRequest) {
   const sector = SECTOR_COORDINATES[request.sector] ?? MEDELLIN_CENTER;
-  const offset = ((index % 3) - 1) * 0.0025;
+  const seed = Array.from(request.id).reduce((sum, character) => sum + character.charCodeAt(0), 0);
+  const offset = ((seed % 5) - 2) * 0.0012;
 
   return {
     latitude: sector.latitude + offset * 0.45,
@@ -78,8 +81,8 @@ function syncRequestMarkers(
     iconSize: [24, 24],
   });
 
-  requests.forEach((request, index) => {
-    const coordinate = coordinateForRequest(request, index);
+  requests.forEach((request) => {
+    const coordinate = coordinateForRequest(request);
 
     leaflet
       .marker([coordinate.latitude, coordinate.longitude], {
@@ -92,7 +95,7 @@ function syncRequestMarkers(
   });
 }
 
-export function MapboxRadar({ requests, onOpenRequest }: MapboxRadarProps) {
+export function MapboxRadar({ requests, onOpenRequest, center, radiusKm }: MapboxRadarProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Leaflet.Map | null>(null);
   const markersLayerRef = useRef<Leaflet.LayerGroup | null>(null);
@@ -116,7 +119,7 @@ export function MapboxRadar({ requests, onOpenRequest }: MapboxRadarProps) {
 
       leafletRef.current = leaflet;
       map = leaflet.map(mapContainerRef.current, {
-        center: [MEDELLIN_CENTER.latitude, MEDELLIN_CENTER.longitude],
+        center: [center.latitude, center.longitude],
         dragging: true,
         maxZoom: 18,
         minZoom: 10,
@@ -142,12 +145,12 @@ export function MapboxRadar({ requests, onOpenRequest }: MapboxRadarProps) {
       leaflet.control.zoom({ position: "topright" }).addTo(map);
 
       leaflet
-        .circle([MEDELLIN_CENTER.latitude, MEDELLIN_CENTER.longitude], {
+        .circle([center.latitude, center.longitude], {
           color: "#4d69d8",
           fillColor: "#4d69d8",
           fillOpacity: 0.09,
           opacity: 0.48,
-          radius: 5000,
+          radius: radiusKm * 1000,
           weight: 1.5,
         })
         .addTo(map);
@@ -169,7 +172,7 @@ export function MapboxRadar({ requests, onOpenRequest }: MapboxRadarProps) {
       leafletRef.current = null;
       map = null;
     };
-  }, [onOpenRequest, token]);
+  }, [center.latitude, center.longitude, onOpenRequest, radiusKm, token]);
 
   useEffect(() => {
     const leaflet = leafletRef.current;
@@ -199,10 +202,10 @@ export function MapboxRadar({ requests, onOpenRequest }: MapboxRadarProps) {
       <div ref={mapContainerRef} className="absolute inset-0 z-0" />
       <div className="pointer-events-none absolute inset-x-0 top-0 z-[500] flex items-start justify-between p-4">
         <div className="rounded-full border border-white/70 bg-white/90 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#4d69d8] shadow-sm backdrop-blur-sm">
-          Radar activo · 5 km
+          Radar · {radiusKm} km
         </div>
         <div className="rounded-full border border-white/70 bg-white/90 px-3 py-1.5 text-[10px] font-semibold text-[#647382] shadow-sm backdrop-blur-sm">
-          Ubicación aproximada
+          Ubicación del técnico
         </div>
       </div>
       <div className="pointer-events-none absolute bottom-4 left-4 z-[500] rounded-xl border border-white/70 bg-white/90 px-3 py-2.5 shadow-sm backdrop-blur-sm">
