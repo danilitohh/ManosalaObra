@@ -101,8 +101,19 @@ export function MapboxRadar({ requests, onOpenRequest, center, radiusKm }: Mapbo
   const markersLayerRef = useRef<Leaflet.LayerGroup | null>(null);
   const leafletRef = useRef<typeof import("leaflet") | null>(null);
   const requestsRef = useRef(requests);
+  const centerRef = useRef(center);
+  const radiusRef = useRef(radiusKm);
+  const onOpenRequestRef = useRef(onOpenRequest);
+  const radarCircleRef = useRef<Leaflet.Circle | null>(null);
+  const technicianMarkerRef = useRef<Leaflet.Marker | null>(null);
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
   const requestKey = requests.map((request) => `${request.id}:${request.sector}`).join("|");
+
+  useEffect(() => {
+    centerRef.current = center;
+    radiusRef.current = radiusKm;
+    onOpenRequestRef.current = onOpenRequest;
+  }, [center, onOpenRequest, radiusKm]);
 
   useEffect(() => {
     requestsRef.current = requests;
@@ -119,7 +130,7 @@ export function MapboxRadar({ requests, onOpenRequest, center, radiusKm }: Mapbo
 
       leafletRef.current = leaflet;
       map = leaflet.map(mapContainerRef.current, {
-        center: [center.latitude, center.longitude],
+        center: [centerRef.current.latitude, centerRef.current.longitude],
         dragging: true,
         maxZoom: 18,
         minZoom: 10,
@@ -144,21 +155,39 @@ export function MapboxRadar({ requests, onOpenRequest, center, radiusKm }: Mapbo
 
       leaflet.control.zoom({ position: "topright" }).addTo(map);
 
-      leaflet
-        .circle([center.latitude, center.longitude], {
+      const radarCircle = leaflet
+        .circle([centerRef.current.latitude, centerRef.current.longitude], {
           color: "#4d69d8",
           fillColor: "#4d69d8",
           fillOpacity: 0.09,
           opacity: 0.48,
-          radius: radiusKm * 1000,
+          radius: radiusRef.current * 1000,
           weight: 1.5,
         })
         .addTo(map);
+      radarCircleRef.current = radarCircle;
+
+      const technicianIcon = leaflet.divIcon({
+        className: "mapbox-technician-icon",
+        html: '<span class="leaflet-technician-dot" aria-hidden="true"></span>',
+        iconAnchor: [12, 12],
+        iconSize: [24, 24],
+      });
+
+      const technicianMarker = leaflet
+        .marker([centerRef.current.latitude, centerRef.current.longitude], {
+          alt: "Ubicación de búsqueda del técnico",
+          icon: technicianIcon,
+          title: "Tu ubicación de búsqueda",
+          zIndexOffset: 1000,
+        })
+        .addTo(map);
+      technicianMarkerRef.current = technicianMarker;
 
       const markersLayer = leaflet.layerGroup().addTo(map);
       markersLayerRef.current = markersLayer;
       mapRef.current = map;
-      syncRequestMarkers(leaflet, markersLayer, requestsRef.current, onOpenRequest);
+      syncRequestMarkers(leaflet, markersLayer, requestsRef.current, onOpenRequestRef.current);
 
       requestAnimationFrame(() => map?.invalidateSize());
     });
@@ -167,19 +196,32 @@ export function MapboxRadar({ requests, onOpenRequest, center, radiusKm }: Mapbo
       cancelled = true;
       markersLayerRef.current?.clearLayers();
       markersLayerRef.current = null;
+      radarCircleRef.current = null;
+      technicianMarkerRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
       leafletRef.current = null;
       map = null;
     };
-  }, [center.latitude, center.longitude, onOpenRequest, radiusKm, token]);
+  }, [token]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const position: [number, number] = [center.latitude, center.longitude];
+    if (!map) return;
+
+    map.setView(position, map.getZoom(), { animate: true });
+    radarCircleRef.current?.setLatLng(position);
+    radarCircleRef.current?.setRadius(radiusKm * 1000);
+    technicianMarkerRef.current?.setLatLng(position);
+  }, [center.latitude, center.longitude, radiusKm]);
 
   useEffect(() => {
     const leaflet = leafletRef.current;
     const layer = markersLayerRef.current;
 
-    if (leaflet && layer) syncRequestMarkers(leaflet, layer, requests, onOpenRequest);
-  }, [onOpenRequest, requestKey, requests]);
+    if (leaflet && layer) syncRequestMarkers(leaflet, layer, requests, onOpenRequestRef.current);
+  }, [requestKey, requests]);
 
   if (!token) {
     return (

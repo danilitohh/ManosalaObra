@@ -397,11 +397,22 @@ export default function MarketplaceApp({ mode }: { mode: Mode }) {
   const payDigitalService = (serviceId: string) => { setState((current) => completeDigitalPayment(current, serviceId)); notify("Pago de prueba completado. Servicio finalizado."); };
   const updateLocation = () => {
     if (!navigator.geolocation) { setLocationError("Este navegador no permite obtener la ubicación. Elige un sector aproximado."); return; }
+    if (!window.isSecureContext) { setLocationError("Para usar el GPS, abre la app por HTTPS y permite el acceso a la ubicación en el navegador."); return; }
     setLocationError("");
     navigator.geolocation.getCurrentPosition(
-      ({ coords }) => { setRadarOrigin({ latitude: coords.latitude, longitude: coords.longitude }); setLocationLabel("Ubicación actual del dispositivo"); },
-      () => setLocationError("No pudimos acceder a tu ubicación. Puedes elegir un sector aproximado."),
-      { enableHighAccuracy: false, maximumAge: 60_000, timeout: 10_000 },
+      ({ coords }) => {
+        setRadarOrigin({ latitude: coords.latitude, longitude: coords.longitude });
+        setLocationLabel(`GPS del dispositivo · precisión ±${Math.round(coords.accuracy)} m`);
+      },
+      (error) => {
+        const message = error.code === error.PERMISSION_DENIED
+          ? "Permiso de ubicación denegado. Actívalo en los ajustes del navegador y vuelve a intentarlo."
+          : error.code === error.POSITION_UNAVAILABLE
+            ? "El dispositivo no pudo determinar tu posición. Activa el GPS o prueba cerca de una ventana."
+            : "La lectura del GPS tardó demasiado. Comprueba el permiso y vuelve a intentarlo.";
+        setLocationError(message);
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 25_000 },
     );
   };
   const updateManualSector = (sector: string) => { setManualSector(sector); setRadarOrigin(locationForSector(sector)); setLocationLabel(`${sector} · ubicación aproximada`); setLocationError(""); };
