@@ -31,11 +31,11 @@ import { Button, Card, Chip } from "@heroui/react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, FormEvent, ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { KokonutGlassCard } from "@/components/ui/kokonut-glass-card";
 import { MapboxRadar } from "@/components/maps/MapboxRadar";
 import { ReactBitsReveal } from "@/components/ui/react-bits-reveal";
 import { ServiceCategoryIcon } from "@/components/ui/service-category-icon";
-import { SupabaseAuthPanel } from "@/components/auth/SupabaseAuthPanel";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { loadMarketplaceState, uploadRequestPhotos } from "@/lib/supabase/marketplace";
 import {
@@ -290,6 +290,7 @@ function EmptyPanel({ title, text, icon: Icon }: { title: string; text: string; 
 }
 
 export default function MarketplaceApp({ mode }: { mode: Mode }) {
+  const router = useRouter();
   const [activeNav, setActiveNav] = useState(mode === "technician" ? "Radar" : "Inicio");
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const [authUserId, setAuthUserId] = useState<string | null>(null);
@@ -359,6 +360,15 @@ export default function MarketplaceApp({ mode }: { mode: Mode }) {
       .finally(() => { if (active) setStateLoading(false); });
     return () => { active = false; };
   }, [supabase, authUserId]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured() || (!authLoading && !authUserId)) router.replace("/");
+  }, [authLoading, authUserId, router]);
+
+  useEffect(() => {
+    if (!profile || profile.role === mode) return;
+    router.replace(profile.role === "technician" ? "/tecnico" : "/cliente");
+  }, [mode, profile, router]);
 
   useEffect(() => {
     if (!supabase || !profileId) return;
@@ -522,12 +532,10 @@ export default function MarketplaceApp({ mode }: { mode: Mode }) {
   };
   const updateManualSector = (sector: string) => { setManualSector(sector); setRadarOrigin(locationForSector(sector)); setLocationLabel(`${sector} · ubicación aproximada`); setLocationError(""); };
 
-  if (!supabase || !isSupabaseConfigured()) return <SupabaseAuthPanel mode={mode} configured={false} />;
-  if (authLoading) return <div className="flex min-h-screen items-center justify-center bg-[#f7f8fa] text-sm text-[#6f8178]">Conectando con tu cuenta…</div>;
-  if (!authUserId) return <SupabaseAuthPanel mode={mode} configured />;
+  if (!supabase || !isSupabaseConfigured() || authLoading || !authUserId) return <div className="flex min-h-screen items-center justify-center bg-[#f7f8fa] text-sm text-[#6f8178]">Abriendo el acceso…</div>;
   if (profileError && !profile) return <div className="flex min-h-screen items-center justify-center bg-[#f7f8fa] px-5"><div role="alert" className="max-w-lg rounded-2xl border border-[#eadfbd] bg-white p-6 text-sm leading-6 text-[#7b6840]">No pudimos cargar tu perfil. Revisa que la migración de Supabase esté aplicada: {profileError}</div></div>;
   if (!profile) return <div className="flex min-h-screen items-center justify-center bg-[#f7f8fa] text-sm text-[#6f8178]">Preparando tu perfil…</div>;
-  if (profile.role !== mode) return <main className="flex min-h-screen items-center justify-center bg-[#f7f8fa] px-5"><section className="max-w-md rounded-2xl border border-[#e3e8ec] bg-white p-7 text-center"><h1 className="text-xl font-semibold">Esta cuenta es de {profile.role === "client" ? "cliente" : "técnico"}</h1><p className="mt-2 text-sm text-[#7b8985]">Abre el espacio correspondiente para continuar con tu cuenta.</p><Link className="mt-5 inline-flex rounded-xl bg-[#19242d] px-4 py-3 text-sm font-semibold text-white" href={profile.role === "client" ? "/cliente" : "/tecnico"}>Ir a mi espacio</Link><button type="button" onClick={() => { void supabase.auth.signOut(); }} className="mt-4 block w-full text-xs font-semibold text-[#4d69d8]">Cerrar sesión</button></section></main>;
+  if (profile.role !== mode) return <div className="flex min-h-screen items-center justify-center bg-[#f7f8fa] text-sm text-[#6f8178]">Abriendo tu espacio…</div>;
   if (stateLoading && state.requests.length === 0) return <div className="flex min-h-screen items-center justify-center bg-[#f7f8fa] text-sm text-[#6f8178]">Cargando solicitudes y servicios…</div>;
   if (stateError && state.requests.length === 0 && state.services.length === 0) return <main className="flex min-h-screen items-center justify-center bg-[#f7f8fa] px-5"><div role="alert" className="max-w-lg rounded-2xl border border-[#eadfbd] bg-white p-6 text-sm leading-6 text-[#7b6840]">Supabase no pudo cargar los datos: {stateError}</div></main>;
 

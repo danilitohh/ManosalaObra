@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { MarketplaceEntry } from "@/components/auth/MarketplaceEntry";
 
 export default function Home() {
-  redirect("/tecnico");
+  return <MarketplaceEntry />;
 }

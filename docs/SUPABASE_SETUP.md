@@ -14,8 +14,10 @@ En **Authentication → URL Configuration**, agrega como redirect URLs:
 
 - `http://localhost:3000/cliente`
 - `http://localhost:3000/tecnico`
+- `http://localhost:3000/`
 - `https://manosala-obra.vercel.app/cliente`
 - `https://manosala-obra.vercel.app/tecnico`
+- `https://manosala-obra.vercel.app/`
 
 El registro crea cuentas de cliente o técnico según el espacio desde el que se registren. Si Supabase solicita confirmación por correo, confirma el correo y después inicia sesión.
 

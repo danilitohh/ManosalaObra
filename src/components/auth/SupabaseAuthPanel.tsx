@@ -4,10 +4,11 @@ import { useState, type FormEvent } from "react";
 import { ShieldCheck, Wrench } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
-type AuthMode = "client" | "technician";
+type AuthRole = "client" | "technician";
 
-export function SupabaseAuthPanel({ mode, configured }: { mode: AuthMode; configured: boolean }) {
+export function SupabaseAuthPanel({ configured }: { configured: boolean }) {
   const [isSignUp, setIsSignUp] = useState(false);
+  const [role, setRole] = useState<AuthRole>("client");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -30,8 +31,8 @@ export function SupabaseAuthPanel({ mode, configured }: { mode: AuthMode; config
           email,
           password,
           options: {
-            data: { display_name: name.trim(), role: mode },
-            emailRedirectTo: `${window.location.origin}/${mode === "client" ? "cliente" : "tecnico"}`,
+            data: { display_name: name.trim(), role },
+            emailRedirectTo: window.location.origin,
           },
         });
         if (error) throw error;
@@ -51,9 +52,9 @@ export function SupabaseAuthPanel({ mode, configured }: { mode: AuthMode; config
     <main className="flex min-h-screen items-center justify-center bg-[#f7f8fa] px-5 py-12 text-[#19242d]">
       <section className="w-full max-w-[430px] rounded-3xl border border-[#e3e8ec] bg-white p-7 shadow-[0_18px_55px_rgba(40,52,68,0.08)] sm:p-9">
         <div className="flex items-center gap-3 text-[#4d69d8]"><Wrench size={21} /><span className="text-xs font-semibold uppercase tracking-[0.16em]">Manos a la obra</span></div>
-        <p className="mt-8 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#71808f]">{mode === "client" ? "Espacio del cliente" : "Espacio del técnico"}</p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-[-0.045em]">{isSignUp ? "Crea tu cuenta" : "Qué bueno verte"}</h1>
-        <p className="mt-2 text-sm leading-6 text-[#7b8985]">{isSignUp ? "Regístrate para empezar a usar solicitudes y propuestas en tiempo real." : "Inicia sesión para ver los cambios en vivo de tus servicios."}</p>
+        <p className="mt-8 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#71808f]">Marketplace de servicios</p>
+        <h1 className="mt-2 text-2xl font-semibold tracking-[-0.045em]">{isSignUp ? "Crea tu cuenta" : "Inicia sesión"}</h1>
+        <p className="mt-2 text-sm leading-6 text-[#7b8985]">{isSignUp ? "Elige cómo usarás Manos a la obra. Después podrás entrar desde este mismo acceso." : "Usa tu correo y contraseña. Te llevaremos al espacio correspondiente a tu cuenta."}</p>
 
         {!configured ? (
           <div className="mt-6 rounded-2xl border border-[#eadfbd] bg-[#fff9eb] p-4 text-xs leading-5 text-[#7b6840]">
@@ -63,6 +64,7 @@ export function SupabaseAuthPanel({ mode, configured }: { mode: AuthMode; config
         ) : (
           <form onSubmit={submit} className="mt-6 space-y-4">
             {isSignUp && <label className="block text-xs font-semibold text-[#5d6f69]">Nombre completo<input required autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} className="input-style mt-2" placeholder="Tu nombre" /></label>}
+            {isSignUp && <label className="block text-xs font-semibold text-[#5d6f69]">Quiero usar la app como<select value={role} onChange={(event) => setRole(event.target.value as AuthRole)} className="input-style mt-2"><option value="client">Cliente</option><option value="technician">Técnico</option></select></label>}
             <label className="block text-xs font-semibold text-[#5d6f69]">Correo electrónico<input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className="input-style mt-2" placeholder="tu@correo.com" /></label>
             <label className="block text-xs font-semibold text-[#5d6f69]">Contraseña<input required type="password" minLength={8} autoComplete={isSignUp ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} className="input-style mt-2" placeholder="Mínimo 8 caracteres" /></label>
             <div className="flex gap-2 rounded-xl bg-[#f1f3f8] px-3 py-2.5 text-[11px] leading-4 text-[#586a9a]"><ShieldCheck size={15} className="mt-0.5 shrink-0" />Tu sesión se valida con Supabase Auth y cada dato se protege con políticas RLS.</div>
