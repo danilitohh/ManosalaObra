@@ -2,7 +2,11 @@ alter table public.profiles drop constraint if exists profiles_role_check;
 alter table public.profiles
   add constraint profiles_role_check check (role in ('client', 'technician', 'admin'));
 
-create or replace function public.is_marketplace_admin()
+create schema if not exists app_private;
+revoke all on schema app_private from public, anon;
+grant usage on schema app_private to authenticated;
+
+create or replace function app_private.is_marketplace_admin()
 returns boolean
 language sql
 stable
@@ -14,19 +18,19 @@ as $$
     where p.id = (select auth.uid()) and p.role = 'admin'
   );
 $$;
-revoke all on function public.is_marketplace_admin() from public, anon;
-grant execute on function public.is_marketplace_admin() to authenticated;
+revoke all on function app_private.is_marketplace_admin() from public, anon;
+grant execute on function app_private.is_marketplace_admin() to authenticated;
 
 drop policy if exists "Profiles visible to their owner and technicians" on public.profiles;
 create policy "Profiles visible to owners, technicians and admins"
   on public.profiles for select to authenticated
-  using (id = (select auth.uid()) or role = 'technician' or (select public.is_marketplace_admin()));
+  using (id = (select auth.uid()) or role = 'technician' or (select app_private.is_marketplace_admin()));
 
 drop policy if exists "Clients and nearby technicians can read requests" on public.service_requests;
 create policy "Clients, technicians and admins can read requests"
   on public.service_requests for select to authenticated
   using (
-    (select public.is_marketplace_admin())
+    (select app_private.is_marketplace_admin())
     or client_id = (select auth.uid())
     or (
       status = 'published'
@@ -43,7 +47,7 @@ drop policy if exists "Request participants can read request media" on public.re
 create policy "Request participants and admins can read request media"
   on public.request_media for select to authenticated
   using (
-    (select public.is_marketplace_admin())
+    (select app_private.is_marketplace_admin())
     or exists (
       select 1 from public.service_requests r
       where r.id = request_media.request_id and r.client_id = (select auth.uid())
@@ -64,7 +68,7 @@ drop policy if exists "Users can read related offers" on public.offers;
 create policy "Users and admins can read related offers"
   on public.offers for select to authenticated
   using (
-    (select public.is_marketplace_admin())
+    (select app_private.is_marketplace_admin())
     or technician_id = (select auth.uid())
     or exists (
       select 1 from public.service_requests r
@@ -76,7 +80,7 @@ drop policy if exists "Service participants can read their services" on public.s
 create policy "Service participants and admins can read services"
   on public.services for select to authenticated
   using (
-    (select public.is_marketplace_admin())
+    (select app_private.is_marketplace_admin())
     or client_id = (select auth.uid())
     or technician_id = (select auth.uid())
   );
@@ -84,12 +88,12 @@ create policy "Service participants and admins can read services"
 drop policy if exists "Technicians can read their wallet" on public.technician_wallets;
 create policy "Technicians and admins can read wallets"
   on public.technician_wallets for select to authenticated
-  using (technician_id = (select auth.uid()) or (select public.is_marketplace_admin()));
+  using (technician_id = (select auth.uid()) or (select app_private.is_marketplace_admin()));
 
 drop policy if exists "Technicians can read their wallet transactions" on public.wallet_transactions;
 create policy "Technicians and admins can read wallet transactions"
   on public.wallet_transactions for select to authenticated
-  using (technician_id = (select auth.uid()) or (select public.is_marketplace_admin()));
+  using (technician_id = (select auth.uid()) or (select app_private.is_marketplace_admin()));
 
 drop policy if exists "Request participants and technicians can read request photos" on storage.objects;
 create policy "Request participants technicians and admins can read request photos"
@@ -97,7 +101,7 @@ create policy "Request participants technicians and admins can read request phot
   using (
     bucket_id = 'request-photos'
     and (
-      (select public.is_marketplace_admin())
+      (select app_private.is_marketplace_admin())
       or (storage.foldername(name))[1] = (select auth.uid())::text
       or exists (
         select 1 from public.service_requests r
@@ -112,3 +116,5 @@ create policy "Request participants technicians and admins can read request phot
       )
     )
   );
+
+drop function if exists public.is_marketplace_admin();
