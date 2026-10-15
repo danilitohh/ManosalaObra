@@ -42,7 +42,7 @@ export function MarketplaceEntry() {
         setError(`No pudimos leer el rol de tu cuenta. Verifica que la migración de Supabase esté aplicada. ${profileError.message}`);
         return;
       }
-      router.replace(data.role === "technician" ? "/tecnico" : "/cliente");
+      router.replace(data.role === "admin" ? "/admin" : data.role === "technician" ? "/tecnico" : "/cliente");
     });
     return () => {
       active = false;

@@ -8,7 +8,24 @@ En el proyecto correcto de Supabase, abre **SQL Editor**, pega y ejecuta el cont
 
 No crees una política pública general ni desactives RLS. La dirección exacta está separada de la solicitud y solo la puede consultar el cliente propietario y el técnico asignado.
 
-## 2. Configurar Auth
+## 2. Crear la cuenta de administrador propietario
+
+1. Registra tu cuenta desde el acceso común como cliente o técnico y confirma el correo.
+2. Ejecuta [`20261014000000_admin_role.sql`](../supabase/migrations/20261014000000_admin_role.sql) en el SQL Editor. Esta migración permite el rol `admin`, actualiza RLS y mantiene la asignación fuera del registro público.
+3. En el SQL Editor, reemplaza el correo de ejemplo por el correo exacto de tu cuenta y ejecuta:
+
+```sql
+update public.profiles p
+set role = 'admin'
+from auth.users u
+where p.id = u.id
+  and lower(u.email) = lower('tu-correo@ejemplo.com')
+returning p.id, p.display_name, p.role;
+```
+
+Debe devolver una fila con `role = admin`. Si no devuelve filas, primero registra esa cuenta y confirma el correo. Después inicia sesión de nuevo: el acceso único te enviará a `/admin`. No agregues `admin` a las opciones públicas de registro ni asignes el rol desde el navegador.
+
+## 3. Configurar Auth
 
 En **Authentication → URL Configuration**, agrega como redirect URLs:
 
@@ -21,7 +38,7 @@ En **Authentication → URL Configuration**, agrega como redirect URLs:
 
 El registro crea cuentas de cliente o técnico según el espacio desde el que se registren. Si Supabase solicita confirmación por correo, confirma el correo y después inicia sesión.
 
-## 3. Configurar variables
+## 4. Configurar variables
 
 Copia `.env.example` a `.env.local` y completa:
 
@@ -30,7 +47,7 @@ Copia `.env.example` a `.env.local` y completa:
 
 Agrega esas mismas dos variables a los entornos **Production**, **Preview** y **Development** del proyecto de Vercel y vuelve a desplegar. Nunca uses `service_role`/secret key en variables `NEXT_PUBLIC_*` ni la compartas en el chat.
 
-## 4. Probar Realtime
+## 5. Probar Realtime
 
 1. Ejecuta `npm run dev` y abre `/cliente` y `/tecnico` en dos perfiles de navegador diferentes.
 2. Registra y confirma una cuenta para cada rol.

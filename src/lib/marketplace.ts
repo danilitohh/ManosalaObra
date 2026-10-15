@@ -1,4 +1,5 @@
-export type UserRole = "client" | "technician";
+export type UserRole = "client" | "technician" | "admin";
+export type ServiceParticipantRole = Exclude<UserRole, "admin">;
 export type PaymentMethod = "cash" | "digital";
 export type RequestStatus = "published" | "selected" | "awaiting_balance" | "assigned" | "en_route" | "in_progress" | "payment_pending" | "completed" | "cancelled";
 export type OfferStatus = "pending" | "accepted" | "rejected";
@@ -63,7 +64,7 @@ export type Service = {
   paymentMethod: PaymentMethod;
   status: ServiceStatus;
   addressRevealed: boolean;
-  completionConfirmations?: UserRole[];
+  completionConfirmations?: ServiceParticipantRole[];
   createdAt: string;
 };
 
@@ -274,7 +275,7 @@ export function advanceService(state: MarketplaceState, serviceId: string): Mark
   };
 }
 
-export function confirmServiceCompletion(state: MarketplaceState, serviceId: string, role: UserRole): MarketplaceState {
+export function confirmServiceCompletion(state: MarketplaceState, serviceId: string, role: ServiceParticipantRole): MarketplaceState {
   const service = state.services.find((item) => item.id === serviceId);
   if (!service || !["in_progress", "completion_pending"].includes(service.status)) return state;
   const confirmations = Array.from(new Set([...(service.completionConfirmations ?? []), role]));

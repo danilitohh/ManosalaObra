@@ -17,7 +17,7 @@ function profileToUser(row: DatabaseRow): User {
     id: String(row.id),
     name,
     initials: name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase(),
-    role: row.role === "technician" ? "technician" : "client",
+    role: row.role === "technician" ? "technician" : row.role === "admin" ? "admin" : "client",
     rating: Number(row.rating ?? 0),
     completedServices: Number(row.completed_services ?? 0),
     verified: Boolean(row.verified),

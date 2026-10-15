@@ -49,6 +49,7 @@ import {
   type PaymentMethod,
   type Service,
   type ServiceRequest,
+  type ServiceParticipantRole,
   type UserRole,
   technicianPayoutFor,
 } from "@/lib/marketplace";
@@ -242,7 +243,7 @@ function ServiceModal({ service, request, onClose, onCancel, role, onAdvance, on
   request?: ServiceRequest;
   onClose: () => void;
   onCancel: () => void;
-  role: UserRole;
+  role: ServiceParticipantRole;
   onAdvance: () => void;
   onConfirm: () => void;
   onPay: () => void;
@@ -367,7 +368,7 @@ export default function MarketplaceApp({ mode }: { mode: Mode }) {
 
   useEffect(() => {
     if (!profile || profile.role === mode) return;
-    router.replace(profile.role === "technician" ? "/tecnico" : "/cliente");
+    router.replace(profile.role === "admin" ? "/admin" : profile.role === "technician" ? "/tecnico" : "/cliente");
   }, [mode, profile, router]);
 
   useEffect(() => {
