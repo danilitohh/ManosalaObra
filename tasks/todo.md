@@ -6,11 +6,10 @@
 - [x] Elegir pgTAP y escribir pruebas de regresión para autorización/RLS por rol; falta ejecutarlas con una instancia local Supabase.
 - [x] Etiquetar el flujo de pago digital simulado para que no parezca un cobro real.
 - [x] Añadir paginación server-side de solicitudes de cliente/técnico y de cuentas/solicitudes admin, con conteos reales en métricas.
-- [ ] Añadir navegación por páginas para ofertas, servicios y movimientos si los volúmenes reales lo requieren; hoy tienen límites de lectura.
+- [x] Añadir paginación por páginas para propuestas por solicitud, servicios y movimientos de saldo.
 - [x] Reducir columnas consultadas y limitar filas en las consultas principales.
 - [x] Agrupar eventos de Realtime en ventanas de 300 ms, evitar una recarga duplicada al conectar y mantener la suscripción estable al cambiar la página de solicitudes.
 - [x] Sustituir las recargas completas por consultas puntuales de los IDs afectados en eventos de Realtime; reconciliar el estado completo al reconectar.
-- [ ] Añadir paginación de ofertas, servicios y movimientos cuando el volumen real supere los límites visibles actuales.
 
 ## Después
 

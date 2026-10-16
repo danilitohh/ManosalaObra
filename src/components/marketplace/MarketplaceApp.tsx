@@ -39,12 +39,15 @@ import { ServiceCategoryIcon } from "@/components/ui/service-category-icon";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import {
   loadMarketplaceOffersByIds,
+  loadMarketplaceOffersPage,
   loadMarketplaceRequestsByIds,
   loadMarketplaceRequestsPage,
   loadMarketplaceServicesByIds,
+  loadMarketplaceServicesPage,
   loadMarketplaceState,
   loadMarketplaceTechniciansByIds,
   loadMarketplaceTransactionsByIds,
+  loadMarketplaceTransactionsPage,
   uploadRequestPhotos,
 } from "@/lib/supabase/marketplace";
 import {
@@ -71,7 +74,15 @@ type NavItem = {
   badge?: string;
 };
 
-type LiveMarketplaceState = MarketplaceState & { technicians: User[]; requestPage: number; hasMoreRequests: boolean };
+type LiveMarketplaceState = MarketplaceState & {
+  technicians: User[];
+  requestPage: number;
+  hasMoreRequests: boolean;
+  servicePage: number;
+  hasMoreServices: boolean;
+  transactionPage: number;
+  hasMoreTransactions: boolean;
+};
 type PendingRealtimeChanges = Map<string, Map<string, boolean>>;
 const EMPTY_MARKETPLACE_STATE: LiveMarketplaceState = {
   requests: [],
@@ -82,6 +93,10 @@ const EMPTY_MARKETPLACE_STATE: LiveMarketplaceState = {
   technicians: [],
   requestPage: 0,
   hasMoreRequests: false,
+  servicePage: 0,
+  hasMoreServices: false,
+  transactionPage: 0,
+  hasMoreTransactions: false,
 };
 const technicianNav: NavItem[] = [
   { label: "Radar", icon: Zap, badge: "12" },
@@ -263,8 +278,43 @@ function CreateRequestModal({ onClose, onCreate }: { onClose: () => void; onCrea
   return <ModalShell onClose={onClose}><div className="flex items-start justify-between"><div><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#6679b1]">Nueva solicitud</p><h2 className="mt-1 text-xl font-semibold tracking-[-0.04em] text-[#19242d]">Cuéntanos qué necesitas</h2><p className="mt-1 text-xs text-[#82908b]">Los técnicos certificados cerca de ti podrán enviar propuestas.</p></div><button type="button" onClick={onClose} aria-label="Cerrar" className="rounded-full p-2 text-[#84928d] transition hover:bg-[#f1f3f8] hover:text-[#19242d]"><X size={18} /></button></div><form onSubmit={submit} className="mt-5 space-y-4"><div className="grid gap-3 sm:grid-cols-2"><Field label="Categoría"><select value={category} onChange={(event) => setCategory(event.target.value)} className="input-style"><option>Plomería</option><option>Electricidad</option><option>Pintura</option><option>Climatización</option><option>Carpintería</option></select></Field><Field label="Sector general"><select value={sector} onChange={(event) => setSector(event.target.value)} className="input-style"><option>El Poblado</option><option>Laureles</option><option>Belén</option><option>Envigado</option><option>Centro</option></select></Field></div><Field label="Dirección exacta (privada)"><input required value={exactAddress} onChange={(event) => setExactAddress(event.target.value)} placeholder="Dirección donde se realizará el trabajo" className="input-style" /></Field><Field label="¿Qué necesitas hacer?"><input required value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ej. Reparar fuga de agua en cocina" className="input-style" /></Field><Field label="Describe la actividad"><textarea required value={description} onChange={(event) => setDescription(event.target.value)} rows={3} placeholder="Agrega detalles, medidas, materiales o cualquier información útil..." className="input-style resize-none" /></Field><Field label="Fotos de soporte (opcional)"><div className="rounded-xl border border-dashed border-[#d8e0e8] p-3"><input type="file" accept="image/*" multiple disabled={supportPhotos.length >= 3} onChange={addPhotos} className="block w-full text-[11px] text-[#65746f] file:mr-3 file:rounded-lg file:border-0 file:bg-[#eef1ff] file:px-3 file:py-2 file:text-[10px] file:font-semibold file:text-[#4d69d8] disabled:opacity-50" /><p className="mt-2 text-[10px] text-[#929e99]">Hasta 3 fotos · máximo 5 MB cada una · se optimizan al adjuntar.</p>{photoError && <p role="alert" className="mt-2 text-[10px] text-[#bd7255]">{photoError}</p>}{supportPhotos.length > 0 && <div className="mt-3 grid grid-cols-3 gap-2">{supportPhotos.map((photo, index) => <div key={photo.slice(-32)} className="relative"><NextImage src={photo} alt={`Foto de soporte ${index + 1}`} width={112} height={80} unoptimized className="h-20 w-full rounded-lg object-cover" /><button type="button" aria-label={`Quitar foto ${index + 1}`} onClick={() => setSupportPhotos((current) => current.filter((_, photoIndex) => photoIndex !== index))} className="absolute right-1 top-1 rounded-md bg-white/90 px-1.5 py-1 text-[10px] font-semibold text-[#52655e]">Quitar</button></div>)}</div>}</div></Field><div className="grid gap-3 sm:grid-cols-2"><Field label="Presupuesto estimado"><input required type="number" min="1" value={budget} onChange={(event) => setBudget(event.target.value)} className="input-style" /></Field><Field label="¿Cuándo lo necesitas?"><input value={desiredDate} onChange={(event) => setDesiredDate(event.target.value)} placeholder="Ej. Mañana en la mañana" className="input-style" /></Field></div><Field label="Método de pago"><div className="grid grid-cols-2 gap-2"><button type="button" onClick={() => setPaymentMethod("cash")} className={`rounded-xl border px-3 py-3 text-left text-xs transition ${paymentMethod === "cash" ? "border-[#b7c5ee] bg-[#f0f4ff] text-[#3f55a2]" : "border-[#e5ebe6] text-[#7f8d88]"}`}><span className="block font-semibold">Efectivo</span><span className="mt-1 block text-[10px] opacity-75">Pago directo al técnico</span></button><button type="button" onClick={() => setPaymentMethod("digital")} className={`rounded-xl border px-3 py-3 text-left text-xs transition ${paymentMethod === "digital" ? "border-[#a8c3df] bg-[#eff4fb] text-[#5682b3]" : "border-[#e5ebe6] text-[#7f8d88]"}`}><span className="block font-semibold">Pago digital</span><span className="mt-1 block text-[10px] opacity-75">Paga al finalizar</span></button></div></Field><div className="flex gap-2 rounded-xl bg-[#f1f3f8] px-3 py-2.5 text-[11px] leading-4 text-[#586a9a]"><ShieldCheck size={15} className="mt-0.5 shrink-0" />Tu dirección solo se comparte con el técnico asignado. En esta demo se guarda en el almacenamiento local del navegador.</div><button type="submit" disabled={!title || !description || !exactAddress.trim() || Number(budget) <= 0} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#19242d] px-4 py-3 text-[12px] font-semibold text-white transition hover:bg-[#2a3a49] disabled:cursor-not-allowed disabled:opacity-50"><Plus size={15} />Publicar solicitud</button></form></ModalShell>;
 }
 
-function OffersModal({ request, offers, onClose, onSelect, selectedService }: { request: ServiceRequest; offers: Offer[]; onClose: () => void; onSelect: (offerId: string) => void; selectedService?: Service }) {
-  return <ModalShell onClose={onClose}><div className="flex items-start justify-between"><div><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#6679b1]">Propuestas recibidas</p><h2 className="mt-1 max-w-[370px] text-xl font-semibold tracking-[-0.04em] text-[#19242d]">{request.title}</h2><p className="mt-1 text-xs text-[#82908b]">{offers.length} técnicos interesados · {paymentLabel(request.paymentMethod)}</p></div><button type="button" onClick={onClose} aria-label="Cerrar" className="rounded-full p-2 text-[#84928d] transition hover:bg-[#f1f3f8] hover:text-[#19242d]"><X size={18} /></button></div><div className="mt-5 space-y-3">{offers.length === 0 && <div className="rounded-2xl border border-dashed border-[#cddbd0] px-5 py-8 text-center"><UserRound size={22} className="mx-auto text-[#a5b4ad]" /><p className="mt-3 text-sm font-semibold text-[#52665e]">Aún no hay propuestas</p><p className="mt-1 text-xs text-[#8b9993]">Te avisaremos cuando un técnico se interese.</p></div>}{offers.map((offer) => { const technician = offer.technician ?? { id: offer.technicianId, name: "Técnico", initials: "TE", role: "technician" as const, rating: 0, completedServices: 0, verified: false }; return <div key={offer.id} className={`rounded-2xl border p-4 ${offer.status === "accepted" ? "border-[#b7c5ee] bg-[#f5f6ff]" : "border-[#e5ebe6] bg-white"}`}><div className="flex items-start justify-between gap-3"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#dce4ff] text-xs font-bold text-[#4f65a5]">{technician.initials}</div><div><div className="flex items-center gap-1.5"><p className="text-sm font-semibold text-[#19242d]">{technician.name}</p>{technician.verified && <ShieldCheck size={14} className="text-[#4d69d8]" />}</div><p className="mt-0.5 flex items-center gap-1 text-[11px] text-[#85938d]"><Star size={12} className="fill-[#e6ad3f] text-[#e6ad3f]" />{technician.rating} · {technician.completedServices} servicios</p></div></div><div className="text-right"><p className="text-lg font-semibold tracking-[-0.04em] text-[#19242d]">{formatCOP(offer.price)}</p><p className="text-[10px] text-[#9aa5a1]">{offer.createdAt}</p></div></div><p className="mt-3 text-[11px] leading-5 text-[#71807b]">{offer.message}</p><div className="mt-3 flex items-center justify-between border-t border-[#edf1ed] pt-3"><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${offer.status === "accepted" ? "bg-[#e9edff] text-[#4d69d8]" : "bg-[#f3f5f3] text-[#81908a]"}`}>{offer.status === "accepted" ? "Seleccionada" : "Disponible"}</span>{offer.status === "pending" && !selectedService && request.status === "published" && <button type="button" onClick={() => onSelect(offer.id)} className="rounded-xl bg-[#19242d] px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-[#2a3a49]">Seleccionar técnico</button>}</div></div>; })}</div>{request.status === "awaiting_balance" && <div role="status" className="mt-4 rounded-xl bg-[#fff8e9] px-3 py-2.5 text-[11px] leading-4 text-[#957743]">El técnico debe recargar saldo para activar el servicio. La dirección exacta permanece protegida.</div>}<div className="mt-5 rounded-xl bg-[#fff8e9] px-3 py-2.5 text-[11px] leading-4 text-[#957743]"><strong>Recuerda:</strong> al seleccionar una propuesta, el precio queda pactado y la dirección se comparte únicamente con el técnico asignado.</div></ModalShell>;
+function OffersModal(props: { supabase: NonNullable<ReturnType<typeof getSupabaseBrowserClient>>; request: ServiceRequest; offers: Offer[]; onClose: () => void; onSelect: (offerId: string) => void; selectedService?: Service }) {
+  const { supabase, request, onClose, onSelect, selectedService } = props;
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let active = true;
+    void loadMarketplaceOffersPage(supabase, request.id, 0)
+      .then((result) => {
+        if (!active) return;
+        setOffers(result.offers);
+        setPage(result.page);
+        setHasMore(result.hasMore);
+      })
+      .catch((loadError: unknown) => { if (active) setError(loadError instanceof Error ? loadError.message : "No se pudieron cargar las propuestas."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [request.id, supabase]);
+  const loadMore = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    setError("");
+    try {
+      const result = await loadMarketplaceOffersPage(supabase, request.id, page + 1);
+      setOffers((current) => uniqueById([...current, ...result.offers]));
+      setPage(result.page);
+      setHasMore(result.hasMore);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "No se pudieron cargar más propuestas.");
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+  return <ModalShell onClose={onClose}><div className="flex items-start justify-between"><div><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#6679b1]">Propuestas recibidas</p><h2 className="mt-1 max-w-[370px] text-xl font-semibold tracking-[-0.04em] text-[#19242d]">{request.title}</h2><p className="mt-1 text-xs text-[#82908b]">{offers.length} propuestas cargadas · {paymentLabel(request.paymentMethod)}</p></div><button type="button" onClick={onClose} aria-label="Cerrar" className="rounded-full p-2 text-[#84928d] transition hover:bg-[#f1f3f8] hover:text-[#19242d]"><X size={18} /></button></div><div className="mt-5 space-y-3">{loading && offers.length === 0 && <p role="status" className="py-6 text-center text-xs text-[#82908b]">Cargando propuestas…</p>}{!loading && offers.length === 0 && <div className="rounded-2xl border border-dashed border-[#cddbd0] px-5 py-8 text-center"><UserRound size={22} className="mx-auto text-[#a5b4ad]" /><p className="mt-3 text-sm font-semibold text-[#52665e]">Aún no hay propuestas</p><p className="mt-1 text-xs text-[#8b9993]">Te avisaremos cuando un técnico se interese.</p></div>}{offers.map((offer) => { const technician = offer.technician ?? { id: offer.technicianId, name: "Técnico", initials: "TE", role: "technician" as const, rating: 0, completedServices: 0, verified: false }; return <div key={offer.id} className={`rounded-2xl border p-4 ${offer.status === "accepted" ? "border-[#b7c5ee] bg-[#f5f6ff]" : "border-[#e5ebe6] bg-white"}`}><div className="flex items-start justify-between gap-3"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#dce4ff] text-xs font-bold text-[#4f65a5]">{technician.initials}</div><div><div className="flex items-center gap-1.5"><p className="text-sm font-semibold text-[#19242d]">{technician.name}</p>{technician.verified && <ShieldCheck size={14} className="text-[#4d69d8]" />}</div><p className="mt-0.5 flex items-center gap-1 text-[11px] text-[#85938d]"><Star size={12} className="fill-[#e6ad3f] text-[#e6ad3f]" />{technician.rating} · {technician.completedServices} servicios</p></div></div><div className="text-right"><p className="text-lg font-semibold tracking-[-0.04em] text-[#19242d]">{formatCOP(offer.price)}</p><p className="text-[10px] text-[#9aa5a1]">{offer.createdAt}</p></div></div><p className="mt-3 text-[11px] leading-5 text-[#71807b]">{offer.message}</p><div className="mt-3 flex items-center justify-between border-t border-[#edf1ed] pt-3"><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${offer.status === "accepted" ? "bg-[#e9edff] text-[#4d69d8]" : "bg-[#f3f5f3] text-[#81908a]"}`}>{offer.status === "accepted" ? "Seleccionada" : "Disponible"}</span>{offer.status === "pending" && !selectedService && request.status === "published" && <button type="button" onClick={() => onSelect(offer.id)} className="rounded-xl bg-[#19242d] px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-[#2a3a49]">Seleccionar técnico</button>}</div></div>; })}</div>{error && <p role="alert" className="mt-3 text-xs text-[#bd7255]">{error}</p>}{hasMore && <div className="mt-4 flex justify-center"><button type="button" onClick={() => void loadMore()} disabled={loadingMore} className="rounded-xl border border-[#d8e0e8] bg-white px-4 py-2.5 text-xs font-semibold text-[#53677a] transition hover:border-[#9eafe8] hover:bg-[#f5f7ff] disabled:cursor-wait disabled:opacity-60">{loadingMore ? "Cargando propuestas…" : "Cargar más propuestas"}</button></div>}{request.status === "awaiting_balance" && <div role="status" className="mt-4 rounded-xl bg-[#fff8e9] px-3 py-2.5 text-[11px] leading-4 text-[#957743]">El técnico debe recargar saldo para activar el servicio. La dirección exacta permanece protegida.</div>}<div className="mt-5 rounded-xl bg-[#fff8e9] px-3 py-2.5 text-[11px] leading-4 text-[#957743]"><strong>Recuerda:</strong> al seleccionar una propuesta, el precio queda pactado y la dirección se comparte únicamente con el técnico asignado.</div></ModalShell>;
 }
 
 function ServiceModal({ service, request, onClose, onCancel, role, onAdvance, onConfirm, onPay }: {
@@ -331,8 +381,14 @@ export default function MarketplaceApp({ mode }: { mode: Mode }) {
   const [state, setState] = useState<LiveMarketplaceState>(EMPTY_MARKETPLACE_STATE);
   const requestPageRef = useRef(state.requestPage);
   useEffect(() => { requestPageRef.current = state.requestPage; }, [state.requestPage]);
+  const servicePageRef = useRef(state.servicePage);
+  useEffect(() => { servicePageRef.current = state.servicePage; }, [state.servicePage]);
+  const transactionPageRef = useRef(state.transactionPage);
+  useEffect(() => { transactionPageRef.current = state.transactionPage; }, [state.transactionPage]);
   const [stateLoading, setStateLoading] = useState(true);
   const [loadingMoreRequests, setLoadingMoreRequests] = useState(false);
+  const [loadingMoreServices, setLoadingMoreServices] = useState(false);
+  const [loadingMoreTransactions, setLoadingMoreTransactions] = useState(false);
   const [stateError, setStateError] = useState("");
   const [realtimeConnected, setRealtimeConnected] = useState(false);
   const [toast, setToast] = useState("");
@@ -419,15 +475,27 @@ export default function MarketplaceApp({ mode }: { mode: Mode }) {
       refreshInFlight = true;
       try {
         const requestPage = requestPageRef.current;
-        const [baseState, extraPages] = await Promise.all([
+        const servicePage = servicePageRef.current;
+        const transactionPage = transactionPageRef.current;
+        const [baseState, extraPages, extraServicePages, extraTransactionPages] = await Promise.all([
           loadMarketplaceState(supabase),
           Promise.all(Array.from({ length: requestPage }, (_, page) => loadMarketplaceRequestsPage(supabase, page + 1))),
+          Promise.all(Array.from({ length: servicePage }, (_, page) => loadMarketplaceServicesPage(supabase, profileId, mode, page + 1))),
+          mode === "technician"
+            ? Promise.all(Array.from({ length: transactionPage }, (_, page) => loadMarketplaceTransactionsPage(supabase, profileId, page + 1)))
+            : Promise.resolve([]),
         ]);
         const nextState: LiveMarketplaceState = {
           ...baseState,
           requests: uniqueById([...baseState.requests, ...extraPages.flatMap((page) => page.requests)]),
           requestPage,
           hasMoreRequests: extraPages[extraPages.length - 1]?.hasMoreRequests ?? baseState.hasMoreRequests,
+          services: uniqueById([...baseState.services, ...extraServicePages.flatMap((page) => page.services)]),
+          servicePage,
+          hasMoreServices: extraServicePages[extraServicePages.length - 1]?.hasMore ?? baseState.hasMoreServices,
+          walletTransactions: uniqueById([...baseState.walletTransactions, ...extraTransactionPages.flatMap((page) => page.transactions)]),
+          transactionPage,
+          hasMoreTransactions: extraTransactionPages[extraTransactionPages.length - 1]?.hasMore ?? baseState.hasMoreTransactions,
         };
         if (active) { setState(nextState); setStateError(""); }
       } catch (error) {
@@ -497,9 +565,9 @@ export default function MarketplaceApp({ mode }: { mode: Mode }) {
             ...current,
             requests: mergeRealtimeRows(current.requests, requestIds, requests, maxLoadedRequests),
             offers: nextOffers,
-            services: mergeRealtimeRows(current.services, serviceIds, services, 100),
+            services: mergeRealtimeRows(current.services, serviceIds, services, (current.servicePage + 1) * 20),
             walletBalance: walletChanged ? Number(walletResult.data?.balance_cop ?? 0) : current.walletBalance,
-            walletTransactions: mergeRealtimeRows(current.walletTransactions, transactionIds, transactions, 30),
+            walletTransactions: mergeRealtimeRows(current.walletTransactions, transactionIds, transactions, (current.transactionPage + 1) * 20),
             technicians: nextTechnicians,
           };
         });
@@ -559,7 +627,7 @@ export default function MarketplaceApp({ mode }: { mode: Mode }) {
       setRealtimeConnected(false);
       void supabase.removeChannel(channel);
     };
-  }, [supabase, profileId]);
+  }, [supabase, profileId, mode]);
 
   const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(""), 3200); };
   const loadMoreRequests = async () => {
@@ -577,6 +645,41 @@ export default function MarketplaceApp({ mode }: { mode: Mode }) {
       notify(error instanceof Error ? `No pudimos cargar más solicitudes: ${error.message}` : "No pudimos cargar más solicitudes.");
     } finally {
       setLoadingMoreRequests(false);
+    }
+  };
+  const loadMoreServices = async () => {
+    if (!supabase || !profile || loadingMoreServices || !state.hasMoreServices) return;
+    setLoadingMoreServices(true);
+    try {
+      const nextPage = await loadMarketplaceServicesPage(supabase, profile.id, mode, state.servicePage + 1);
+      setState((current) => ({
+        ...current,
+        services: uniqueById([...current.services, ...nextPage.services]),
+        requests: uniqueById([...current.requests, ...nextPage.requests]),
+        servicePage: nextPage.page,
+        hasMoreServices: nextPage.hasMore,
+      }));
+    } catch (error) {
+      notify(error instanceof Error ? `No pudimos cargar más servicios: ${error.message}` : "No pudimos cargar más servicios.");
+    } finally {
+      setLoadingMoreServices(false);
+    }
+  };
+  const loadMoreTransactions = async () => {
+    if (!supabase || !profile || mode !== "technician" || loadingMoreTransactions || !state.hasMoreTransactions) return;
+    setLoadingMoreTransactions(true);
+    try {
+      const nextPage = await loadMarketplaceTransactionsPage(supabase, profile.id, state.transactionPage + 1);
+      setState((current) => ({
+        ...current,
+        walletTransactions: uniqueById([...current.walletTransactions, ...nextPage.transactions]),
+        transactionPage: nextPage.page,
+        hasMoreTransactions: nextPage.hasMore,
+      }));
+    } catch (error) {
+      notify(error instanceof Error ? `No pudimos cargar más movimientos: ${error.message}` : "No pudimos cargar más movimientos.");
+    } finally {
+      setLoadingMoreTransactions(false);
     }
   };
   const offerCount = (requestId: string) => state.offers.filter((offer) => offer.requestId === requestId).length;
@@ -716,10 +819,10 @@ export default function MarketplaceApp({ mode }: { mode: Mode }) {
   const navItems = mode === "technician" ? technicianNav : clientNav;
   const currentNav = navItems.some((item) => item.label === activeNav) ? activeNav : mode === "technician" ? "Radar" : "Inicio";
 
-  return <main className="min-h-screen bg-[#f7f8fa] text-[#19242d]"><div className="flex min-h-screen"><Sidebar mode={mode} activeNav={currentNav} onNavChange={setActiveNav} /><section className="min-w-0 flex-1"><header className="flex h-[76px] items-center justify-between border-b border-[#e7ece9] bg-[#fbfcfe]/90 px-5 backdrop-blur md:px-8 xl:px-11"><div className="flex items-center gap-3 lg:hidden"><BrandMark compact /><span className="text-[10px] font-semibold text-[#64756e]">{mode === "technician" ? "Espacio técnico" : "Espacio cliente"}</span></div><div className="relative hidden w-full max-w-[340px] md:block"><Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9ba7a2]" /><input aria-label="Buscar" placeholder="Buscar servicios, técnicos..." className="h-10 w-full rounded-xl border border-[#e5ebe7] bg-white pl-10 pr-4 text-xs text-[#19242d] outline-none transition placeholder:text-[#a8b3af] focus:border-[#8fa4ee] focus:ring-4 focus:ring-[#4d69d8]/10" /></div><div className="ml-auto flex items-center gap-3 md:gap-5"><span className="hidden items-center gap-1.5 text-[10px] font-medium text-[#7b8985] sm:flex"><span className={`h-1.5 w-1.5 rounded-full ${realtimeConnected ? "bg-[#55aa69]" : "bg-[#d0a64b]"}`} />{realtimeConnected ? "En vivo" : "Reconectando"}</span><div className="text-right"><p className="hidden text-[10px] font-semibold uppercase tracking-[0.12em] text-[#87938d]">{mode === "technician" ? "Espacio del técnico" : "Espacio del cliente"}</p><Link href={mode === "technician" ? "/cliente" : "/tecnico"} aria-label={mode === "technician" ? "Cambiar al espacio del cliente" : "Cambiar al espacio del técnico"} className="text-[11px] font-semibold text-[#4d69d8] transition hover:text-[#344db5]"><span className="hidden md:inline">Cambiar a </span>{mode === "technician" ? "cliente" : "técnico"} <span aria-hidden="true">→</span></Link></div><button type="button" aria-label="Notificaciones" className="relative rounded-xl p-2 text-[#81908a] transition hover:bg-[#f1f3f8] hover:text-[#19242d]"><Bell size={18} /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#e58b62] ring-2 ring-[#fbfcfe]" /></button><div className="hidden h-8 w-px bg-[#e5ebe7] sm:block" /><button type="button" onClick={() => { void supabase.auth.signOut(); }} className="flex items-center gap-2"><div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#dce4ff] text-xs font-bold text-[#4f65a5]">{profile.initials}</div><div className="hidden text-left sm:block"><p className="text-[11px] font-semibold text-[#314f49]">{profile.name}</p><p className="text-[10px] text-[#9aa7a2]">{profile.role === "technician" ? profile.verified ? "Técnico verificado" : "Técnico" : "Cliente"}</p></div><ChevronDown size={14} className="hidden text-[#98a49f] sm:block" /></button></div></header><div className="mx-auto max-w-[1450px] px-5 py-8 md:px-8 xl:px-11">{mode === "client" ? <ClientDashboard activeNav={currentNav} requests={clientRequests} services={clientServices} state={state} onPublish={() => setCreateRequestOpen(true)} onOpenRequest={setDetailRequest} onOpenService={setDetailService} hasMoreRequests={state.hasMoreRequests} loadingMoreRequests={loadingMoreRequests} onLoadMoreRequests={loadMoreRequests} /> : <TechnicianDashboard technicianId={profile.id} activeNav={currentNav} requests={visibleRequests} state={state} offerCount={offerCount} offeredIds={state.offers.filter((offer) => offer.technicianId === profile.id).map((offer) => offer.requestId)} onFilter={setFilter} filter={filter} sortBy={sortBy} onSortBy={setSortBy} onOffer={openOffer} isAvailable={isAvailable} onToggleAvailability={toggleAvailability} locationLabel={locationLabel} locationError={locationError} onLocate={updateLocation} onSectorChange={updateManualSector} manualSector={manualSector} center={radarOrigin} onOpenRequest={setDetailRequest} onOpenService={setDetailService} onRecharge={recharge} hasMoreRequests={state.hasMoreRequests} loadingMoreRequests={loadingMoreRequests} onLoadMoreRequests={loadMoreRequests} />}</div></section></div>{toast && <div role="status" className="fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-[#19242d] px-4 py-3 text-xs font-semibold text-white shadow-xl"><Check size={15} className="text-[#4d69d8]" />{toast}</div>}{offerRequest && mode === "technician" && <OfferModal request={offerRequest} alreadyOffered={state.offers.some((offer) => offer.requestId === offerRequest.id && offer.technicianId === profile.id)} onClose={() => setOfferRequest(null)} onSent={(price, message) => sendOffer(offerRequest, price, message)} />}{createRequestOpen && mode === "client" && <CreateRequestModal onClose={() => setCreateRequestOpen(false)} onCreate={publishRequest} />}{detailRequest && mode === "client" && <OffersModal request={detailRequest} offers={state.offers.filter((offer) => offer.requestId === detailRequest.id)} selectedService={state.services.find((service) => service.requestId === detailRequest.id)} onClose={() => setDetailRequest(null)} onSelect={(offerId) => chooseOffer(detailRequest.id, offerId)} />}{detailRequest && mode === "technician" && <RequestDetailModal request={detailRequest} onClose={() => setDetailRequest(null)} onOffer={() => { setDetailRequest(null); openOffer(detailRequest); }} />}{detailService && <ServiceModal service={state.services.find((service) => service.id === detailService.id) ?? detailService} request={state.requests.find((request) => request.id === detailService.requestId)} onClose={() => setDetailService(null)} onCancel={() => cancelSelectedService(detailService.id)} role={mode} onAdvance={() => updateServiceProgress(detailService.id)} onConfirm={() => confirmCompletion(detailService.id)} onPay={() => payDigitalService(detailService.id)} />}</main>;
+  return <main className="min-h-screen bg-[#f7f8fa] text-[#19242d]"><div className="flex min-h-screen"><Sidebar mode={mode} activeNav={currentNav} onNavChange={setActiveNav} /><section className="min-w-0 flex-1"><header className="flex h-[76px] items-center justify-between border-b border-[#e7ece9] bg-[#fbfcfe]/90 px-5 backdrop-blur md:px-8 xl:px-11"><div className="flex items-center gap-3 lg:hidden"><BrandMark compact /><span className="text-[10px] font-semibold text-[#64756e]">{mode === "technician" ? "Espacio técnico" : "Espacio cliente"}</span></div><div className="relative hidden w-full max-w-[340px] md:block"><Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9ba7a2]" /><input aria-label="Buscar" placeholder="Buscar servicios, técnicos..." className="h-10 w-full rounded-xl border border-[#e5ebe7] bg-white pl-10 pr-4 text-xs text-[#19242d] outline-none transition placeholder:text-[#a8b3af] focus:border-[#8fa4ee] focus:ring-4 focus:ring-[#4d69d8]/10" /></div><div className="ml-auto flex items-center gap-3 md:gap-5"><span className="hidden items-center gap-1.5 text-[10px] font-medium text-[#7b8985] sm:flex"><span className={`h-1.5 w-1.5 rounded-full ${realtimeConnected ? "bg-[#55aa69]" : "bg-[#d0a64b]"}`} />{realtimeConnected ? "En vivo" : "Reconectando"}</span><div className="text-right"><p className="hidden text-[10px] font-semibold uppercase tracking-[0.12em] text-[#87938d]">{mode === "technician" ? "Espacio del técnico" : "Espacio del cliente"}</p><Link href={mode === "technician" ? "/cliente" : "/tecnico"} aria-label={mode === "technician" ? "Cambiar al espacio del cliente" : "Cambiar al espacio del técnico"} className="text-[11px] font-semibold text-[#4d69d8] transition hover:text-[#344db5]"><span className="hidden md:inline">Cambiar a </span>{mode === "technician" ? "cliente" : "técnico"} <span aria-hidden="true">→</span></Link></div><button type="button" aria-label="Notificaciones" className="relative rounded-xl p-2 text-[#81908a] transition hover:bg-[#f1f3f8] hover:text-[#19242d]"><Bell size={18} /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#e58b62] ring-2 ring-[#fbfcfe]" /></button><div className="hidden h-8 w-px bg-[#e5ebe7] sm:block" /><button type="button" onClick={() => { void supabase.auth.signOut(); }} className="flex items-center gap-2"><div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#dce4ff] text-xs font-bold text-[#4f65a5]">{profile.initials}</div><div className="hidden text-left sm:block"><p className="text-[11px] font-semibold text-[#314f49]">{profile.name}</p><p className="text-[10px] text-[#9aa7a2]">{profile.role === "technician" ? profile.verified ? "Técnico verificado" : "Técnico" : "Cliente"}</p></div><ChevronDown size={14} className="hidden text-[#98a49f] sm:block" /></button></div></header><div className="mx-auto max-w-[1450px] px-5 py-8 md:px-8 xl:px-11">{mode === "client" ? <ClientDashboard activeNav={currentNav} requests={clientRequests} services={clientServices} state={state} onPublish={() => setCreateRequestOpen(true)} onOpenRequest={setDetailRequest} onOpenService={setDetailService} hasMoreRequests={state.hasMoreRequests} loadingMoreRequests={loadingMoreRequests} onLoadMoreRequests={loadMoreRequests} /> : <TechnicianDashboard technicianId={profile.id} activeNav={currentNav} requests={visibleRequests} state={state} offerCount={offerCount} offeredIds={state.offers.filter((offer) => offer.technicianId === profile.id).map((offer) => offer.requestId)} onFilter={setFilter} filter={filter} sortBy={sortBy} onSortBy={setSortBy} onOffer={openOffer} isAvailable={isAvailable} onToggleAvailability={toggleAvailability} locationLabel={locationLabel} locationError={locationError} onLocate={updateLocation} onSectorChange={updateManualSector} manualSector={manualSector} center={radarOrigin} onOpenRequest={setDetailRequest} onOpenService={setDetailService} onRecharge={recharge} hasMoreRequests={state.hasMoreRequests} loadingMoreRequests={loadingMoreRequests} onLoadMoreRequests={loadMoreRequests} hasMoreServices={state.hasMoreServices} loadingMoreServices={loadingMoreServices} onLoadMoreServices={loadMoreServices} hasMoreTransactions={state.hasMoreTransactions} loadingMoreTransactions={loadingMoreTransactions} onLoadMoreTransactions={loadMoreTransactions} />}</div></section></div>{toast && <div role="status" className="fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-[#19242d] px-4 py-3 text-xs font-semibold text-white shadow-xl"><Check size={15} className="text-[#4d69d8]" />{toast}</div>}{offerRequest && mode === "technician" && <OfferModal request={offerRequest} alreadyOffered={state.offers.some((offer) => offer.requestId === offerRequest.id && offer.technicianId === profile.id)} onClose={() => setOfferRequest(null)} onSent={(price, message) => sendOffer(offerRequest, price, message)} />}{createRequestOpen && mode === "client" && <CreateRequestModal onClose={() => setCreateRequestOpen(false)} onCreate={publishRequest} />}{detailRequest && mode === "client" && <OffersModal supabase={supabase} request={detailRequest} offers={state.offers.filter((offer) => offer.requestId === detailRequest.id)} selectedService={state.services.find((service) => service.requestId === detailRequest.id)} onClose={() => setDetailRequest(null)} onSelect={(offerId) => chooseOffer(detailRequest.id, offerId)} />}{detailRequest && mode === "technician" && <RequestDetailModal request={detailRequest} onClose={() => setDetailRequest(null)} onOffer={() => { setDetailRequest(null); openOffer(detailRequest); }} />}{detailService && <ServiceModal service={state.services.find((service) => service.id === detailService.id) ?? detailService} request={state.requests.find((request) => request.id === detailService.requestId)} onClose={() => setDetailService(null)} onCancel={() => cancelSelectedService(detailService.id)} role={mode} onAdvance={() => updateServiceProgress(detailService.id)} onConfirm={() => confirmCompletion(detailService.id)} onPay={() => payDigitalService(detailService.id)} />}</main>;
 }
 
-function TechnicianDashboard({ technicianId, activeNav, requests, state, offerCount, offeredIds, sortBy, onSortBy, onOffer, onOpenRequest, onOpenService, onRecharge, isAvailable, onToggleAvailability, locationLabel, locationError, onLocate, center, hasMoreRequests, loadingMoreRequests, onLoadMoreRequests }: {
+function TechnicianDashboard({ technicianId, activeNav, requests, state, offerCount, offeredIds, sortBy, onSortBy, onOffer, onOpenRequest, onOpenService, onRecharge, isAvailable, onToggleAvailability, locationLabel, locationError, onLocate, center, hasMoreRequests, loadingMoreRequests, onLoadMoreRequests, hasMoreServices, loadingMoreServices, onLoadMoreServices, hasMoreTransactions, loadingMoreTransactions, onLoadMoreTransactions }: {
   activeNav: string;
   technicianId: string;
   requests: ServiceRequest[];
@@ -745,9 +848,15 @@ function TechnicianDashboard({ technicianId, activeNav, requests, state, offerCo
   hasMoreRequests: boolean;
   loadingMoreRequests: boolean;
   onLoadMoreRequests: () => void;
+  hasMoreServices: boolean;
+  loadingMoreServices: boolean;
+  onLoadMoreServices: () => void;
+  hasMoreTransactions: boolean;
+  loadingMoreTransactions: boolean;
+  onLoadMoreTransactions: () => void;
 }) {
-  if (activeNav === "Mi saldo") return <div><PageHeading eyebrow="Tu economía" title="Mi saldo prepago" description="La comisión en efectivo se descuenta al asignar el servicio. Si se cancela, se devuelve completa." /><div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)]"><LedgerBalanceCard balance={state.walletBalance} onRecharge={onRecharge} /><TransactionList transactions={state.walletTransactions} /></div></div>;
-  if (activeNav === "Mis servicios") return <ServicesPanel services={state.services.filter((service) => service.technicianId === technicianId)} requests={state.requests} onOpen={onOpenService} role="technician" />;
+  if (activeNav === "Mi saldo") return <div><PageHeading eyebrow="Tu economía" title="Mi saldo prepago" description="La comisión en efectivo se descuenta al asignar el servicio. Si se cancela, se devuelve completa." /><div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)]"><LedgerBalanceCard balance={state.walletBalance} onRecharge={onRecharge} /><TransactionList transactions={state.walletTransactions} hasMore={hasMoreTransactions} loadingMore={loadingMoreTransactions} onLoadMore={onLoadMoreTransactions} /></div></div>;
+  if (activeNav === "Mis servicios") return <ServicesPanel services={state.services.filter((service) => service.technicianId === technicianId)} requests={state.requests} onOpen={onOpenService} role="technician" hasMore={hasMoreServices} loadingMore={loadingMoreServices} onLoadMore={onLoadMoreServices} />;
   if (activeNav === "Mensajes") return <EmptyPanel title="Tus mensajes aparecerán aquí" text="Cuando un cliente responda una propuesta o necesite coordinar un detalle, la conversación estará disponible en este espacio." icon={MessageCircle} />;
 
   return (
@@ -839,12 +948,12 @@ function ClientRequestList({ requests, state, onOpen, onOpenService, hasMoreRequ
   return <div className="mt-4 space-y-3">{requests.map((request) => { const service = state.services.find((item) => item.requestId === request.id); return <div key={request.id} className="flex flex-col gap-4 rounded-2xl border border-[#e7ece9] bg-white p-4 shadow-[0_8px_30px_rgba(39,65,60,0.035)] sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><ServiceCategoryIcon category={request.category} className="text-[#4d69d8]" /><div><h3 className="text-sm font-semibold text-[#19242d]">{request.title}</h3><p className="mt-1 text-[11px] text-[#8b9893]">{request.category} · {state.offers.filter((offer) => offer.requestId === request.id).length} propuestas · {paymentLabel(request.paymentMethod)}</p></div></div><div className="flex items-center gap-3"><span className={`rounded-full px-2.5 py-1.5 text-[10px] font-semibold ${request.status === "assigned" ? "bg-blue-50 text-blue-700" : request.status === "cancelled" ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>{service ? statusLabel(service.status) : request.status === "awaiting_balance" ? "Esperando saldo" : "Recibiendo ofertas"}</span>{service && onOpenService ? <button type="button" onClick={() => onOpenService(service)} className="text-xs font-semibold text-[#4d69d8]">Ver servicio</button> : <button type="button" onClick={() => onOpen(request)} className="text-xs font-semibold text-[#4d69d8]">Ver ofertas</button>}</div></div>; })}{hasMoreRequests && onLoadMoreRequests && <div className="flex justify-center pt-3"><button type="button" disabled={loadingMoreRequests} onClick={onLoadMoreRequests} className="rounded-xl border border-[#d8e0e8] bg-white px-4 py-2.5 text-xs font-semibold text-[#53677a] transition hover:border-[#9eafe8] hover:bg-[#f5f7ff] disabled:cursor-wait disabled:opacity-60">{loadingMoreRequests ? "Cargando solicitudes…" : "Cargar más solicitudes"}</button></div>}</div>;
 }
 
-function ServicesPanel({ services, requests, onOpen, role }: { services: Service[]; requests: ServiceRequest[]; onOpen: (service: Service) => void; role: UserRole }) {
-  return <div><PageHeading eyebrow="Seguimiento" title={role === "technician" ? "Mis servicios" : "Servicios contratados"} description="Consulta los servicios asignados y gestiona su estado." />{services.length === 0 ? <EmptyPanel title="Aún no tienes servicios asignados" text="Cuando un cliente seleccione una de tus propuestas, el servicio aparecerá aquí." icon={BriefcaseBusiness} /> : <div className="mt-6 space-y-3">{services.map((service) => <button type="button" key={service.id} onClick={() => onOpen(service)} className="flex w-full items-center justify-between rounded-2xl border border-[#e7ece9] bg-white p-5 text-left shadow-[0_8px_30px_rgba(39,65,60,0.035)] transition hover:border-[#c5d0f2]"><div><p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#687996]">{requests.find((request) => request.id === service.requestId)?.category}</p><h3 className="mt-1 text-sm font-semibold text-[#19242d]">{requests.find((request) => request.id === service.requestId)?.title}</h3><p className="mt-2 text-[11px] text-[#8b9893]">{paymentLabel(service.paymentMethod)} · {formatCOP(service.agreedPrice)}</p></div><div className="flex items-center gap-3"><span className="rounded-full bg-[#eef1ff] px-2.5 py-1.5 text-[10px] font-semibold text-[#4d69d8]">{statusLabel(service.status)}</span><ArrowUpRight size={16} className="text-[#81918a]" /></div></button>)}</div>}</div>;
+function ServicesPanel({ services, requests, onOpen, role, hasMore = false, loadingMore = false, onLoadMore }: { services: Service[]; requests: ServiceRequest[]; onOpen: (service: Service) => void; role: UserRole; hasMore?: boolean; loadingMore?: boolean; onLoadMore?: () => void }) {
+  return <div><PageHeading eyebrow="Seguimiento" title={role === "technician" ? "Mis servicios" : "Servicios contratados"} description="Consulta los servicios asignados y gestiona su estado." />{services.length === 0 ? <EmptyPanel title="Aún no tienes servicios asignados" text="Cuando un cliente seleccione una de tus propuestas, el servicio aparecerá aquí." icon={BriefcaseBusiness} /> : <div className="mt-6 space-y-3">{services.map((service) => <button type="button" key={service.id} onClick={() => onOpen(service)} className="flex w-full items-center justify-between rounded-2xl border border-[#e7ece9] bg-white p-5 text-left shadow-[0_8px_30px_rgba(39,65,60,0.035)] transition hover:border-[#c5d0f2]"><div><p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#687996]">{requests.find((request) => request.id === service.requestId)?.category}</p><h3 className="mt-1 text-sm font-semibold text-[#19242d]">{requests.find((request) => request.id === service.requestId)?.title}</h3><p className="mt-2 text-[11px] text-[#8b9893]">{paymentLabel(service.paymentMethod)} · {formatCOP(service.agreedPrice)}</p></div><div className="flex items-center gap-3"><span className="rounded-full bg-[#eef1ff] px-2.5 py-1.5 text-[10px] font-semibold text-[#4d69d8]">{statusLabel(service.status)}</span><ArrowUpRight size={16} className="text-[#81918a]" /></div></button>)}</div>}{hasMore && onLoadMore && <div className="mt-5 flex justify-center"><button type="button" disabled={loadingMore} onClick={onLoadMore} className="rounded-xl border border-[#d8e0e8] bg-white px-4 py-2.5 text-xs font-semibold text-[#53677a] transition hover:border-[#9eafe8] hover:bg-[#f5f7ff] disabled:cursor-wait disabled:opacity-60">{loadingMore ? "Cargando servicios…" : "Cargar más servicios"}</button></div>}</div>;
 }
 
-function TransactionList({ transactions, compact = false }: { transactions: MarketplaceState["walletTransactions"]; compact?: boolean }) {
-  return <div className={`rounded-2xl border border-[#e7ece9] bg-white p-5 shadow-[0_8px_30px_rgba(39,65,60,0.035)] ${compact ? "border-0 p-0 shadow-none" : "mt-6"}`}><div className="flex items-center justify-between"><h3 className="text-sm font-semibold text-[#19242d]">{compact ? "Actividad reciente" : "Movimientos"}</h3>{!compact && <span className="text-[11px] text-[#8b9893]">Saldo prepago</span>}</div><div className="mt-5 space-y-4">{transactions.map((transaction) => <div key={transaction.id} className="flex gap-3">{transaction.amount >= 0 ? <ArrowDownLeft aria-hidden="true" className="text-[#4d69d8]" size={16} /> : <ArrowUpRight aria-hidden="true" className="text-[#c58b28]" size={16} />}<div className="min-w-0 flex-1"><p className="text-[11px] font-semibold text-[#52655e]">{transaction.description}</p><div className="mt-0.5 flex justify-between gap-2"><p className="text-[10px] text-[#9aa5a1]">{transaction.createdAt}</p><span className={`text-[11px] font-semibold ${transaction.amount >= 0 ? "text-[#4d69d8]" : "text-[#c58b28]"}`}>{transaction.amount >= 0 ? "+" : ""}{formatCOP(transaction.amount)}</span></div></div></div>)}</div></div>;
+function TransactionList({ transactions, compact = false, hasMore = false, loadingMore = false, onLoadMore }: { transactions: MarketplaceState["walletTransactions"]; compact?: boolean; hasMore?: boolean; loadingMore?: boolean; onLoadMore?: () => void }) {
+  return <div className={`rounded-2xl border border-[#e7ece9] bg-white p-5 shadow-[0_8px_30px_rgba(39,65,60,0.035)] ${compact ? "border-0 p-0 shadow-none" : "mt-6"}`}><div className="flex items-center justify-between"><h3 className="text-sm font-semibold text-[#19242d]">{compact ? "Actividad reciente" : "Movimientos"}</h3>{!compact && <span className="text-[11px] text-[#8b9893]">Saldo prepago</span>}</div><div className="mt-5 space-y-4">{transactions.map((transaction) => <div key={transaction.id} className="flex gap-3">{transaction.amount >= 0 ? <ArrowDownLeft aria-hidden="true" className="text-[#4d69d8]" size={16} /> : <ArrowUpRight aria-hidden="true" className="text-[#c58b28]" size={16} />}<div className="min-w-0 flex-1"><p className="text-[11px] font-semibold text-[#52655e]">{transaction.description}</p><div className="mt-0.5 flex justify-between gap-2"><p className="text-[10px] text-[#9aa5a1]">{transaction.createdAt}</p><span className={`text-[11px] font-semibold ${transaction.amount >= 0 ? "text-[#4d69d8]" : "text-[#c58b28]"}`}>{transaction.amount >= 0 ? "+" : ""}{formatCOP(transaction.amount)}</span></div></div></div>)}</div>{hasMore && onLoadMore && <div className="mt-5 flex justify-center"><button type="button" disabled={loadingMore} onClick={onLoadMore} className="rounded-xl border border-[#d8e0e8] bg-white px-4 py-2.5 text-xs font-semibold text-[#53677a] transition hover:border-[#9eafe8] hover:bg-[#f5f7ff] disabled:cursor-wait disabled:opacity-60">{loadingMore ? "Cargando movimientos…" : "Cargar más movimientos"}</button></div>}</div>;
 }
 
 function RequestDetailModal({ request, onClose, onOffer }: { request: ServiceRequest; onClose: () => void; onOffer: () => void }) {

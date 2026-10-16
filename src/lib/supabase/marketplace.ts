@@ -3,6 +3,7 @@ import type { MarketplaceState, Offer, Service, ServiceRequest, User, WalletTran
 
 type DatabaseRow = Record<string, unknown>;
 const REQUESTS_PER_PAGE = 20;
+const RELATED_PER_PAGE = 20;
 const RELATED_ROWS_LIMIT = 100;
 const REQUEST_COLUMNS = "id, client_id, category, title, description, sector, budget_cop, payment_method, desired_date, status, selected_offer_id, created_at";
 
@@ -170,7 +171,89 @@ export async function loadMarketplaceTransactionsByIds(client: SupabaseClient, t
   }));
 }
 
-export async function loadMarketplaceState(client: SupabaseClient, requestPage = 0): Promise<MarketplaceState & { technicians: User[]; requestPage: number; hasMoreRequests: boolean }> {
+export async function loadMarketplaceOffersPage(client: SupabaseClient, requestId: string, page: number) {
+  const safePage = Math.max(0, Math.floor(page));
+  const from = safePage * RELATED_PER_PAGE;
+  const { data, error } = await client.from("offers")
+    .select("id, request_id, technician_id, price_cop, message, status, created_at")
+    .eq("request_id", requestId)
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .range(from, from + RELATED_PER_PAGE);
+  if (error) throw error;
+  const rows = (data ?? []) as DatabaseRow[];
+  const visibleRows = rows.slice(0, RELATED_PER_PAGE);
+  const technicians = await loadMarketplaceTechniciansByIds(client, visibleRows.map((row) => String(row.technician_id)));
+  const technicianById = new Map(technicians.map((technician) => [technician.id, technician]));
+  const offers = visibleRows.map((row): Offer => ({
+    id: String(row.id),
+    requestId: String(row.request_id),
+    technicianId: String(row.technician_id),
+    price: Number(row.price_cop),
+    message: String(row.message ?? ""),
+    status: String(row.status) as Offer["status"],
+    createdAt: timestampLabel(row.created_at),
+    technician: technicianById.get(String(row.technician_id)),
+  }));
+  return { offers, page: safePage, hasMore: rows.length > RELATED_PER_PAGE };
+}
+
+export async function loadMarketplaceServicesPage(client: SupabaseClient, userId: string, role: "client" | "technician", page: number) {
+  const safePage = Math.max(0, Math.floor(page));
+  const from = safePage * RELATED_PER_PAGE;
+  let query = client.from("services").select(
+    "id, request_id, client_id, technician_id, agreed_price_cop, commission_cop, payment_method, status, address_revealed, completion_confirmations, created_at",
+  );
+  query = role === "technician" ? query.eq("technician_id", userId) : query.eq("client_id", userId);
+  const { data, error } = await query
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .range(from, from + RELATED_PER_PAGE);
+  if (error) throw error;
+  const rows = (data ?? []) as DatabaseRow[];
+  const visibleRows = rows.slice(0, RELATED_PER_PAGE);
+  const services = visibleRows.map((row): Service => ({
+    id: String(row.id),
+    requestId: String(row.request_id),
+    clientId: String(row.client_id),
+    technicianId: String(row.technician_id),
+    agreedPrice: Number(row.agreed_price_cop),
+    commission: Number(row.commission_cop),
+    paymentMethod: row.payment_method === "digital" ? "digital" : "cash",
+    status: String(row.status) as Service["status"],
+    addressRevealed: Boolean(row.address_revealed),
+    completionConfirmations: Array.isArray(row.completion_confirmations) ? row.completion_confirmations as Service["completionConfirmations"] : [],
+    createdAt: timestampLabel(row.created_at),
+  }));
+  const requests = await loadMarketplaceRequestsByIds(client, visibleRows.map((row) => String(row.request_id)));
+  return { services, requests, page: safePage, hasMore: rows.length > RELATED_PER_PAGE };
+}
+
+export async function loadMarketplaceTransactionsPage(client: SupabaseClient, technicianId: string, page: number) {
+  const safePage = Math.max(0, Math.floor(page));
+  const from = safePage * RELATED_PER_PAGE;
+  const { data, error } = await client.from("wallet_transactions")
+    .select("id, type, amount_cop, description, created_at")
+    .eq("technician_id", technicianId)
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .range(from, from + RELATED_PER_PAGE);
+  if (error) throw error;
+  const rows = (data ?? []) as DatabaseRow[];
+  return {
+    transactions: rows.slice(0, RELATED_PER_PAGE).map((row): WalletTransaction => ({
+      id: String(row.id),
+      type: String(row.type) as WalletTransaction["type"],
+      amount: Number(row.amount_cop),
+      description: String(row.description),
+      createdAt: timestampLabel(row.created_at),
+    })),
+    page: safePage,
+    hasMore: rows.length > RELATED_PER_PAGE,
+  };
+}
+
+export async function loadMarketplaceState(client: SupabaseClient, requestPage = 0): Promise<MarketplaceState & { technicians: User[]; requestPage: number; hasMoreRequests: boolean; servicePage: number; hasMoreServices: boolean; transactionPage: number; hasMoreTransactions: boolean }> {
   const safePage = Math.max(0, Math.floor(requestPage));
   const from = safePage * REQUESTS_PER_PAGE;
   const requestTo = from + REQUESTS_PER_PAGE;
@@ -181,9 +264,9 @@ export async function loadMarketplaceState(client: SupabaseClient, requestPage =
       .order("id", { ascending: false })
       .range(from, requestTo),
     client.from("offers").select("id, request_id, technician_id, price_cop, message, status, created_at").order("created_at", { ascending: false }).limit(RELATED_ROWS_LIMIT),
-    client.from("services").select("id, request_id, client_id, technician_id, agreed_price_cop, commission_cop, payment_method, status, address_revealed, completion_confirmations, created_at").order("created_at", { ascending: false }).limit(RELATED_ROWS_LIMIT),
+    client.from("services").select("id, request_id, client_id, technician_id, agreed_price_cop, commission_cop, payment_method, status, address_revealed, completion_confirmations, created_at").order("created_at", { ascending: false }).order("id", { ascending: false }).range(0, RELATED_PER_PAGE),
     client.from("technician_wallets").select("balance_cop").maybeSingle(),
-    client.from("wallet_transactions").select("id, type, amount_cop, description, created_at").order("created_at", { ascending: false }).limit(30),
+    client.from("wallet_transactions").select("id, type, amount_cop, description, created_at").order("created_at", { ascending: false }).order("id", { ascending: false }).range(0, RELATED_PER_PAGE),
   ]);
 
   for (const result of [requestResult, offerResult, serviceResult, walletResult, transactionResult]) {
@@ -193,7 +276,9 @@ export async function loadMarketplaceState(client: SupabaseClient, requestPage =
   const requestRows = (requestResult.data ?? []) as DatabaseRow[];
   const hasMoreRequests = requestRows.length > REQUESTS_PER_PAGE;
   const visibleRequestRows = requestRows.slice(0, REQUESTS_PER_PAGE);
-  const serviceRows = (serviceResult.data ?? []) as DatabaseRow[];
+  const allServiceRows = (serviceResult.data ?? []) as DatabaseRow[];
+  const hasMoreServices = allServiceRows.length > RELATED_PER_PAGE;
+  const serviceRows = allServiceRows.slice(0, RELATED_PER_PAGE);
   const requestIds = [...new Set([
     ...visibleRequestRows.map((row) => String(row.id)),
     ...serviceRows.map((row) => String(row.request_id)),
@@ -227,7 +312,7 @@ export async function loadMarketplaceState(client: SupabaseClient, requestPage =
     technician: technicianById.get(String(row.technician_id)),
   }));
 
-  const services: Service[] = ((serviceResult.data ?? []) as DatabaseRow[]).map((row) => ({
+  const services: Service[] = serviceRows.map((row) => ({
     id: String(row.id),
     requestId: String(row.request_id),
     clientId: String(row.client_id),
@@ -241,7 +326,9 @@ export async function loadMarketplaceState(client: SupabaseClient, requestPage =
     createdAt: timestampLabel(row.created_at),
   }));
 
-  const walletTransactions: WalletTransaction[] = ((transactionResult.data ?? []) as DatabaseRow[]).map((row) => ({
+  const transactionRows = (transactionResult.data ?? []) as DatabaseRow[];
+  const hasMoreTransactions = transactionRows.length > RELATED_PER_PAGE;
+  const walletTransactions: WalletTransaction[] = transactionRows.slice(0, RELATED_PER_PAGE).map((row) => ({
     id: String(row.id),
     type: String(row.type) as WalletTransaction["type"],
     amount: Number(row.amount_cop),
@@ -258,6 +345,10 @@ export async function loadMarketplaceState(client: SupabaseClient, requestPage =
     walletTransactions,
     requestPage: safePage,
     hasMoreRequests,
+    servicePage: 0,
+    hasMoreServices,
+    transactionPage: 0,
+    hasMoreTransactions,
   };
 }
 
