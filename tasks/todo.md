@@ -2,11 +2,13 @@
 
 ## Próximo
 
-- [ ] Revisar y aprobar `tasks/plan.md` antes de implementar.
-- [ ] Elegir el arnés de pruebas y escribir pruebas de regresión para autorización/RLS por rol.
-- [ ] Etiquetar o bloquear el flujo de pago digital simulado para que no parezca un cobro real.
-- [ ] Diseñar e implementar paginación server-side de solicitudes/ofertas y del panel admin.
-- [ ] Reducir columnas consultadas y acotar suscripciones/refrescos de Supabase Realtime.
+- [x] Revisar y aprobar `tasks/plan.md` antes de implementar.
+- [x] Elegir pgTAP y escribir pruebas de regresión para autorización/RLS por rol; falta ejecutarlas con una instancia local Supabase.
+- [x] Etiquetar el flujo de pago digital simulado para que no parezca un cobro real.
+- [x] Añadir paginación server-side de solicitudes de cliente/técnico y de cuentas/solicitudes admin, con conteos reales en métricas.
+- [ ] Añadir navegación por páginas para ofertas, servicios y movimientos si los volúmenes reales lo requieren; hoy tienen límites de lectura.
+- [x] Reducir columnas consultadas y limitar filas en las consultas principales.
+- [ ] Acotar suscripciones/refrescos de Supabase Realtime para actualizar solo los datos afectados.
 
 ## Después
 
@@ -21,3 +23,4 @@
 
 - [ ] Identidad/contacto y prácticas reales para completar textos legales y de soporte.
 - [ ] Proveedor y condiciones de pago para sustituir la simulación por pagos reales.
+- [ ] Instancia local/configuración Supabase CLI y Docker para ejecutar `supabase test db` sobre las pruebas pgTAP.
