@@ -6,51 +6,30 @@ Cerrar brechas verificables frente a las instrucciones globales del proyecto, ma
 
 ## Estado conocido
 
-- La app separa cliente, técnico y administración mediante rutas.
-- Usa Supabase Auth, políticas RLS, Storage privado y Realtime.
-- El panel de administración es principalmente de consulta.
-- No hay todavía una suite automatizada de pruebas ni páginas legales/consentimiento identificadas.
-- Las vistas de marketplace consultan varias colecciones sin paginación y hay refrescos Realtime que recargan el estado completo.
-- El flujo de pago digital actual es una simulación; no se debe presentar como una transferencia real ni como dinero efectivamente recibido.
-- El proyecto ya usa HeroUI y también componentes propios inspirados en Kokonut UI y React Bits.
+- La app separa cliente, técnico y administración mediante rutas, usa Supabase Auth, políticas RLS, Storage privado y Realtime.
+- El panel de administración sigue siendo principalmente de consulta; el control de la aplicación no es autorización de servidor para las tablas: RLS es la frontera de datos.
+- Las consultas del marketplace y del panel ya tienen límites/paginación, y los eventos Realtime se reconcilian por IDs.
+- Hay pruebas pgTAP de RLS; se ampliaron con comprobaciones de privilegios. No se pudieron ejecutar porque el entorno no tiene Supabase CLI, Docker ni `psql`.
+- Se añadió una migración de endurecimiento local para limitar publicaciones/propuestas, validar entrada en servidor y centralizar escrituras; debe probarse primero en una base local/staging y aún no está aplicada.
+- Los diálogos ahora anuncian el rol, gestionan Escape, foco inicial, ciclo de foco y restauración; falta auditoría manual con lector de pantalla/dispositivo móvil.
+- Se añadieron CSP y encabezados HTTP de seguridad. La CSP permite estilos/scripts inline por compatibilidad de Next actual; conviene evolucionarla a nonce después de migrar a renderizado dinámico.
+- El flujo digital es una simulación. No se deben presentar cobros o transferencias reales sin integrar y validar una pasarela.
+- No hay páginas legales publicables ni analítica: faltan datos reales del operador y definición verificada de tratamiento/retención y consentimiento.
+- `npm audit --omit=dev` reporta cero vulnerabilidades; el audit completo detecta cinco avisos altos en `braces` dentro del toolchain de ESLint, sin parche compatible disponible en el registro consultado (el fix forzado degradaría `eslint-config-next` a v14).
 
-## Entrega inicial propuesta
+## Entregas realizadas / por validar
 
-1. **Pruebas de seguridad y regresión**
-   - Definir una estrategia viable de pruebas para las migraciones y operaciones Supabase existentes.
-   - Cubrir acceso anónimo, cliente, técnico y administrador; verificar propiedad, rol y campos permitidos.
-   - Añadir pruebas de los flujos críticos existentes antes de ampliar su comportamiento.
-2. **Transparencia del pago digital**
-   - Identificar todas las pantallas que muestran el pago simulado.
-   - Etiquetarlo claramente como demostración/no disponible o deshabilitarlo hasta integrar una pasarela real.
-   - No afirmar que se capturó, liquidó o transfirió dinero sin confirmación de un proveedor real.
-3. **Escalabilidad de consultas y Realtime**
-   - Añadir paginación y límites de servidor a los listados que pueden crecer, empezando por solicitudes/ofertas y administración.
-   - Sustituir `select('*')` por columnas necesarias y evitar cargar perfiles o tablas completas.
-   - Mantener Realtime acotado a los registros relevantes, con refresco incremental o invalidación por vista.
-4. **Seguridad y antiabuso**
-   - Revisar autorización de servidor/RLS para cambios de estado, saldo y roles.
-   - Añadir límites de frecuencia en autenticación, formularios, búsquedas y subidas, según el punto real de ejecución disponible.
-   - Revisar validación de entradas, archivos, cookies y headers de seguridad.
-5. **Accesibilidad, calidad y observabilidad**
-   - Auditar teclado, foco, semántica, contraste, textos de error, objetivos táctiles y texto alternativo.
-   - Incorporar logging de errores sin secretos ni datos personales innecesarios y pruebas de rutas/permisos.
-   - Revisar dependencias, licencias y vulnerabilidades; medir rendimiento de consultas antes de optimizar índices o arquitectura.
-6. **Privacidad, términos, cookies y reembolsos**
-   - Inventariar datos personales, cookies/SDK y flujo de pagos real.
-   - Preparar borradores adecuados a Colombia, con consentimiento y preferencias si corresponde.
-   - Publicar solo después de recibir identidad legal/comercial, canales de contacto, prácticas reales de retención y condiciones de servicio/reembolso. Solicitar revisión profesional cuando proceda; no inventar declaraciones de cumplimiento.
-7. **Analítica respetuosa con el consentimiento**
-   - Definir eventos mínimos y objetivos de medición; excluir datos sensibles.
-   - Activar analítica no esencial únicamente conforme a las preferencias y al consentimiento aplicable.
-
-## Orden de ejecución
-
-Se propone iniciar por los puntos 1–3: pruebas de permisos/regresión, transparencia de pago y consultas paginadas. Después, abordar endurecimiento de seguridad, accesibilidad/observabilidad y, en paralelo, recopilar los datos reales necesarios para los textos legales. Analítica queda detrás del diseño de consentimiento.
+1. **Seguridad local** — migración de rate limit, validación y privilegios añadida; pendiente ejecutar y revisar con datos de prueba fuera de producción.
+2. **Pruebas** — pgTAP existente ampliado; pendiente obtener entorno local/staging para ejecutarlas.
+3. **UI** — diálogos accesibles en teclado y encabezados configurados; requiere revisión manual de lectores de pantalla y compatibilidad CSP en los navegadores objetivo.
+4. **Dependencias** — audit completo detectó riesgo únicamente en herramienta de desarrollo (braces); no forzar degradación mayor. Production-only audit limpio.
+5. **Observabilidad, rendimiento y licencias** — aún falta definir proveedor/eventos y recopilar métricas representativas antes de hacer cambios de arquitectura.
+6. **Legal y consentimiento** — no publicar textos hasta conocer identidad, contacto y prácticas reales; dejarlo como requisito previo a lanzamiento público.
+7. **Pagos reales** — requiere proveedor, reglas de liquidación/reembolso y credenciales de sandbox/prod; ahora continúa como simulación.
 
 ## Criterios de aceptación por entrega
 
-- `lint` y `build` pasan; las pruebas nuevas pasan y cubren los permisos relevantes.
+- `lint` y `build` pasan; en esta entrega ambos pasan. `npm audit --omit=dev` pasa sin hallazgos; la suite pgTAP sigue pendiente de ejecutarse.
 - Los cambios no exponen direcciones exactas, claves privadas, información interna ni datos ajenos al usuario.
 - Los listados consultan solo los campos necesarios y tienen límites/paginación en el servidor.
 - Estados de pago reflejan únicamente hechos confirmados por una integración real; las simulaciones se etiquetan como tales.

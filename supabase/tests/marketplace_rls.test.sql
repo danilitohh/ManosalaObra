@@ -1,5 +1,5 @@
 begin;
-select plan(14);
+select plan(19);
 
 insert into auth.users (id, email, raw_user_meta_data)
 values
@@ -12,6 +12,15 @@ values
 update public.profiles
 set role = 'admin'
 where id = '55555555-5555-4555-8555-555555555555';
+
+select is(
+  has_function_privilege('authenticated', 'public.handle_new_user()', 'EXECUTE'), false,
+  'authenticated users cannot invoke the auth trigger function directly'
+);
+select is(
+  has_table_privilege('authenticated', 'app_private.marketplace_rate_events', 'SELECT'), false,
+  'authenticated users cannot inspect internal rate-limit events'
+);
 
 insert into public.service_requests (id, client_id, category, title, description, sector, budget_cop, payment_method, desired_date, status)
 values
@@ -35,6 +44,24 @@ select throws_ok(
 
 set local role authenticated;
 set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
+select throws_ok(
+  $$insert into public.service_requests (client_id, category, title, description, sector, budget_cop, payment_method, desired_date)
+    values ('11111111-1111-4111-8111-111111111111', 'Plomería', 'Intento directo', 'No autorizado', 'Centro', 100000, 'cash', 'Mañana')$$,
+  '42501', null,
+  'a client must use the validated publication RPC instead of inserting a request directly'
+);
+select throws_ok(
+  $$insert into public.request_private_details (request_id, exact_address)
+    values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Dirección manipulada')$$,
+  '42501', null,
+  'a client cannot add or overwrite a private address directly'
+);
+select throws_ok(
+  $$insert into public.request_media (request_id, photo_paths)
+    values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', array['otro-usuario/foto.jpg'])$$,
+  '42501', null,
+  'a client cannot attach media directly to an existing request'
+);
 select results_eq(
   $$select exact_address from public.request_private_details where request_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'$$,
   array['Dirección privada de prueba 1'],

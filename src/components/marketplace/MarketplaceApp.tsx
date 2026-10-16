@@ -358,7 +358,51 @@ function ServiceModal({ service, request, onClose, onCancel, role, onAdvance, on
   );
 }
 function ModalShell({ children, onClose }: { children: ReactNode; onClose: () => void }) {
-  return <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-[#111820]/45 p-4 backdrop-blur-sm" onMouseDown={onClose}><div className="max-h-[92vh] w-full max-w-[500px] overflow-y-auto rounded-3xl border border-white/60 bg-[#fbfcfe] p-6 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>{children}</div></div>;
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = dialogRef.current;
+    const focusableSelector = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const focusFirst = () => dialog?.querySelector<HTMLElement>(focusableSelector)?.focus();
+    focusFirst();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab" || !dialog) return;
+
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector));
+      if (!focusable.length) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      previousFocus?.focus();
+    };
+  }, []);
+
+  return <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-[#111820]/45 p-4 backdrop-blur-sm" onMouseDown={onClose}><div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Ventana de Manos a la Obra" tabIndex={-1} className="max-h-[92vh] w-full max-w-[500px] overflow-y-auto rounded-3xl border border-white/60 bg-[#fbfcfe] p-6 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>{children}</div></div>;
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
