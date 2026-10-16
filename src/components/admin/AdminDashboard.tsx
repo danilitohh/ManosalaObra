@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Activity, BriefcaseBusiness, ClipboardList, LogOut, RefreshCw, ShieldCheck, Users } from "lucide-react";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
@@ -41,6 +41,7 @@ export function AdminDashboard() {
   const [data, setData] = useState<AdminData>(EMPTY_DATA);
   const [profilePage, setProfilePage] = useState(0);
   const [requestPage, setRequestPage] = useState(0);
+  const refreshRef = useRef<() => Promise<void>>(async () => {});
 
   useEffect(() => {
     if (!supabase) return;
@@ -103,18 +104,30 @@ export function AdminDashboard() {
     }
     setLoading(false);
   }, [profilePage, requestPage, role, supabase]);
+  useEffect(() => { refreshRef.current = refresh; }, [refresh]);
+
+  useEffect(() => {
+    if (role === "admin") void Promise.resolve().then(refresh);
+  }, [refresh, role]);
 
   useEffect(() => {
     if (!supabase || role !== "admin") return;
-    void Promise.resolve().then(refresh);
+    let refreshTimer: number | undefined;
+    const scheduleRefresh = () => {
+      window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => { void refreshRef.current(); }, 300);
+    };
     const channel = supabase.channel("admin-dashboard")
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => { void refresh(); })
-      .on("postgres_changes", { event: "*", schema: "public", table: "service_requests" }, () => { void refresh(); })
-      .on("postgres_changes", { event: "*", schema: "public", table: "services" }, () => { void refresh(); })
-      .on("postgres_changes", { event: "*", schema: "public", table: "offers" }, () => { void refresh(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "service_requests" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "services" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "offers" }, scheduleRefresh)
       .subscribe();
-    return () => { void supabase.removeChannel(channel); };
-  }, [refresh, role, supabase]);
+    return () => {
+      window.clearTimeout(refreshTimer);
+      void supabase.removeChannel(channel);
+    };
+  }, [role, supabase]);
 
   if (!isSupabaseConfigured() || authLoading || !userId || !role || role !== "admin") {
     return <main className="flex min-h-screen items-center justify-center bg-[#f7f8fa] px-5 text-sm text-[#6f8178]">{error || "Verificando acceso de administración…"}</main>;

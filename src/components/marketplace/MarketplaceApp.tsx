@@ -29,7 +29,7 @@ import Link from "next/link";
 import NextImage from "next/image";
 import { Button, Card, Chip } from "@heroui/react";
 import type { LucideIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent, ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { KokonutGlassCard } from "@/components/ui/kokonut-glass-card";
@@ -306,6 +306,8 @@ export default function MarketplaceApp({ mode }: { mode: Mode }) {
   const [authLoading, setAuthLoading] = useState(Boolean(supabase));
   const [profileError, setProfileError] = useState("");
   const [state, setState] = useState<LiveMarketplaceState>(EMPTY_MARKETPLACE_STATE);
+  const requestPageRef = useRef(state.requestPage);
+  useEffect(() => { requestPageRef.current = state.requestPage; }, [state.requestPage]);
   const [stateLoading, setStateLoading] = useState(true);
   const [loadingMoreRequests, setLoadingMoreRequests] = useState(false);
   const [stateError, setStateError] = useState("");
@@ -382,36 +384,49 @@ export default function MarketplaceApp({ mode }: { mode: Mode }) {
     if (!supabase || !profileId) return;
     let active = true;
     let refreshTimer: number | undefined;
+    let refreshInFlight = false;
+    let refreshQueued = false;
     const refresh = async () => {
+      if (refreshInFlight) {
+        refreshQueued = true;
+        return;
+      }
+      refreshInFlight = true;
       try {
+        const requestPage = requestPageRef.current;
         const [baseState, extraPages] = await Promise.all([
           loadMarketplaceState(supabase),
-          Promise.all(Array.from({ length: state.requestPage }, (_, page) => loadMarketplaceRequestsPage(supabase, page + 1))),
+          Promise.all(Array.from({ length: requestPage }, (_, page) => loadMarketplaceRequestsPage(supabase, page + 1))),
         ]);
         const nextState: LiveMarketplaceState = {
           ...baseState,
           requests: uniqueById([...baseState.requests, ...extraPages.flatMap((page) => page.requests)]),
-          requestPage: state.requestPage,
+          requestPage,
           hasMoreRequests: extraPages[extraPages.length - 1]?.hasMoreRequests ?? baseState.hasMoreRequests,
         };
         if (active) { setState(nextState); setStateError(""); }
       } catch (error) {
         if (active) setStateError(error instanceof Error ? error.message : "No pudimos leer los datos de Supabase.");
       } finally {
+        refreshInFlight = false;
         if (active) setStateLoading(false);
+        if (active && refreshQueued) {
+          refreshQueued = false;
+          scheduleRefresh();
+        }
       }
+    };
+    const scheduleRefresh = () => {
+      window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => { void refresh(); }, 300);
     };
     void refresh();
     const channel = supabase.channel(`marketplace:${profileId}`);
     for (const table of ["service_requests", "request_media", "offers", "services", "technician_wallets", "wallet_transactions", "profiles"]) {
-      channel.on("postgres_changes", { event: "*", schema: "public", table }, () => {
-        window.clearTimeout(refreshTimer);
-        refreshTimer = window.setTimeout(() => { void refresh(); }, 120);
-      });
+      channel.on("postgres_changes", { event: "*", schema: "public", table }, scheduleRefresh);
     }
     channel.subscribe((status) => {
       setRealtimeConnected(status === "SUBSCRIBED");
-      if (status === "SUBSCRIBED") { window.clearTimeout(refreshTimer); void refresh(); }
     });
     return () => {
       active = false;
@@ -419,7 +434,7 @@ export default function MarketplaceApp({ mode }: { mode: Mode }) {
       setRealtimeConnected(false);
       void supabase.removeChannel(channel);
     };
-  }, [supabase, profileId, state.requestPage]);
+  }, [supabase, profileId]);
 
   const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(""), 3200); };
   const loadMoreRequests = async () => {

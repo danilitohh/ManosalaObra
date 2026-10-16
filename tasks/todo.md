@@ -8,7 +8,9 @@
 - [x] Añadir paginación server-side de solicitudes de cliente/técnico y de cuentas/solicitudes admin, con conteos reales en métricas.
 - [ ] Añadir navegación por páginas para ofertas, servicios y movimientos si los volúmenes reales lo requieren; hoy tienen límites de lectura.
 - [x] Reducir columnas consultadas y limitar filas en las consultas principales.
-- [ ] Acotar suscripciones/refrescos de Supabase Realtime para actualizar solo los datos afectados.
+- [x] Agrupar eventos de Realtime en ventanas de 300 ms, evitar una recarga duplicada al conectar y mantener la suscripción estable al cambiar la página de solicitudes.
+- [ ] Sustituir el refresco completo por consultas de la entidad afectada; instrumentar llamadas para comprobar el ahorro y evitar consultas N+1.
+- [ ] Añadir paginación de ofertas, servicios y movimientos cuando el volumen real supere los límites visibles actuales.
 
 ## Después
 
