@@ -37,7 +37,16 @@ import { MapboxRadar } from "@/components/maps/MapboxRadar";
 import { ReactBitsReveal } from "@/components/ui/react-bits-reveal";
 import { ServiceCategoryIcon } from "@/components/ui/service-category-icon";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
-import { loadMarketplaceRequestsPage, loadMarketplaceState, uploadRequestPhotos } from "@/lib/supabase/marketplace";
+import {
+  loadMarketplaceOffersByIds,
+  loadMarketplaceRequestsByIds,
+  loadMarketplaceRequestsPage,
+  loadMarketplaceServicesByIds,
+  loadMarketplaceState,
+  loadMarketplaceTechniciansByIds,
+  loadMarketplaceTransactionsByIds,
+  uploadRequestPhotos,
+} from "@/lib/supabase/marketplace";
 import {
   commissionFor,
   distanceBetween,
@@ -63,6 +72,7 @@ type NavItem = {
 };
 
 type LiveMarketplaceState = MarketplaceState & { technicians: User[]; requestPage: number; hasMoreRequests: boolean };
+type PendingRealtimeChanges = Map<string, Map<string, boolean>>;
 const EMPTY_MARKETPLACE_STATE: LiveMarketplaceState = {
   requests: [],
   offers: [],
@@ -93,6 +103,19 @@ const statusLabel = (status: Service["status"]) => ({ assigned: "Asignado", en_r
 
 function uniqueById<T extends { id: string }>(items: T[]) {
   return [...new Map(items.map((item) => [item.id, item])).values()];
+}
+
+function mergeRealtimeRows<T extends { id: string }>(current: T[], changedIds: string[], incoming: T[], limit: number) {
+  const changed = new Set(changedIds);
+  const incomingById = new Map(incoming.map((item) => [item.id, item]));
+  const currentIds = new Set(current.map((item) => item.id));
+  const newRows = incoming.filter((item) => !currentIds.has(item.id));
+  const refreshedRows = current.flatMap((item) => {
+    if (!changed.has(item.id)) return [item];
+    const refreshed = incomingById.get(item.id);
+    return refreshed ? [refreshed] : [];
+  });
+  return [...newRows, ...refreshedRows].slice(0, limit);
 }
 
 function compressPhoto(file: File): Promise<string> {
@@ -386,9 +409,11 @@ export default function MarketplaceApp({ mode }: { mode: Mode }) {
     let refreshTimer: number | undefined;
     let refreshInFlight = false;
     let refreshQueued = false;
-    const refresh = async () => {
+    let snapshotQueued = false;
+    let pendingChanges: PendingRealtimeChanges = new Map();
+    const refreshSnapshot = async () => {
       if (refreshInFlight) {
-        refreshQueued = true;
+        snapshotQueued = true;
         return;
       }
       refreshInFlight = true;
@@ -410,23 +435,123 @@ export default function MarketplaceApp({ mode }: { mode: Mode }) {
       } finally {
         refreshInFlight = false;
         if (active) setStateLoading(false);
-        if (active && refreshQueued) {
+        if (active && snapshotQueued) {
+          snapshotQueued = false;
+          refreshQueued = false;
+          window.clearTimeout(refreshTimer);
+          refreshTimer = window.setTimeout(() => { void refreshSnapshot(); }, 0);
+        } else if (active && (refreshQueued || pendingChanges.size > 0)) {
           refreshQueued = false;
           scheduleRefresh();
         }
       }
     };
+
+    const refreshAffectedRows = async () => {
+      if (refreshInFlight) {
+        refreshQueued = true;
+        return;
+      }
+      if (pendingChanges.size === 0) return;
+      refreshInFlight = true;
+      const changes = pendingChanges;
+      pendingChanges = new Map();
+      const idsFor = (table: string) => [...(changes.get(table)?.keys() ?? [])];
+      const liveIdsFor = (table: string) => idsFor(table).filter((id) => !changes.get(table)?.get(id));
+      const requestIds = [...new Set([...liveIdsFor("service_requests"), ...idsFor("request_media")])];
+      const offerIds = idsFor("offers");
+      const serviceIds = idsFor("services");
+      const transactionIds = idsFor("wallet_transactions");
+      const profileIds = idsFor("profiles");
+      const walletChanged = idsFor("technician_wallets").length > 0;
+      try {
+        const [requests, offers, services, transactions, walletResult] = await Promise.all([
+          requestIds.length ? loadMarketplaceRequestsByIds(supabase, requestIds) : Promise.resolve([]),
+          offerIds.length ? loadMarketplaceOffersByIds(supabase, liveIdsFor("offers")) : Promise.resolve([]),
+          serviceIds.length ? loadMarketplaceServicesByIds(supabase, liveIdsFor("services")) : Promise.resolve([]),
+          transactionIds.length ? loadMarketplaceTransactionsByIds(supabase, liveIdsFor("wallet_transactions")) : Promise.resolve([]),
+          walletChanged
+            ? supabase.from("technician_wallets").select("balance_cop").eq("technician_id", profileId).maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
+        ]);
+        if (walletResult.error) throw walletResult.error;
+
+        const offerTechnicianIds = offers.map((offer) => offer.technicianId);
+        const technicians = await loadMarketplaceTechniciansByIds(supabase, [...profileIds, ...offerTechnicianIds]);
+        if (!active) return;
+
+        setState((current) => {
+          const knownTechnicianIds = new Set([
+            ...current.technicians.map((technician) => technician.id),
+            ...offerTechnicianIds,
+          ]);
+          const visibleTechnicianIds = technicians
+            .filter((technician) => knownTechnicianIds.has(technician.id))
+            .map((technician) => technician.id);
+          const nextTechnicians = mergeRealtimeRows(current.technicians, visibleTechnicianIds, technicians, 200);
+          const technicianById = new Map(nextTechnicians.map((technician) => [technician.id, technician]));
+          const nextOffers = mergeRealtimeRows(current.offers, offerIds, offers, 100)
+            .map((offer) => ({ ...offer, technician: technicianById.get(offer.technicianId) ?? offer.technician }));
+          const maxLoadedRequests = (current.requestPage + 1) * 20 + 100;
+          return {
+            ...current,
+            requests: mergeRealtimeRows(current.requests, requestIds, requests, maxLoadedRequests),
+            offers: nextOffers,
+            services: mergeRealtimeRows(current.services, serviceIds, services, 100),
+            walletBalance: walletChanged ? Number(walletResult.data?.balance_cop ?? 0) : current.walletBalance,
+            walletTransactions: mergeRealtimeRows(current.walletTransactions, transactionIds, transactions, 30),
+            technicians: nextTechnicians,
+          };
+        });
+
+        const ownProfile = technicians.find((technician) => technician.id === profileId);
+        if (ownProfile && profileIds.includes(profileId)) {
+          setProfile(ownProfile);
+          setIsAvailable(Boolean(ownProfile.available));
+        }
+        setStateError("");
+      } catch (error) {
+        if (active) setStateError(error instanceof Error ? error.message : "No pudimos sincronizar los cambios de Supabase.");
+      } finally {
+        refreshInFlight = false;
+        if (active && snapshotQueued) {
+          snapshotQueued = false;
+          refreshQueued = false;
+          window.clearTimeout(refreshTimer);
+          refreshTimer = window.setTimeout(() => { void refreshSnapshot(); }, 0);
+        } else if (active && (refreshQueued || pendingChanges.size > 0)) {
+          refreshQueued = false;
+          scheduleRefresh();
+        }
+      }
+    };
+
     const scheduleRefresh = () => {
       window.clearTimeout(refreshTimer);
-      refreshTimer = window.setTimeout(() => { void refresh(); }, 300);
+      refreshTimer = window.setTimeout(() => { void refreshAffectedRows(); }, 300);
     };
-    void refresh();
+    const queueChange = (table: string, payload: { eventType: string; new: { id?: string }; old: { id?: string } }) => {
+      const row = payload.eventType === "DELETE" ? payload.old : payload.new;
+      const id = typeof row.id === "string" ? row.id : "";
+      if (!id) return;
+      const tableChanges = pendingChanges.get(table) ?? new Map<string, boolean>();
+      tableChanges.set(id, payload.eventType === "DELETE");
+      pendingChanges.set(table, tableChanges);
+      scheduleRefresh();
+    };
+
+    void refreshSnapshot();
+    let hasConnectedOnce = false;
     const channel = supabase.channel(`marketplace:${profileId}`);
     for (const table of ["service_requests", "request_media", "offers", "services", "technician_wallets", "wallet_transactions", "profiles"]) {
-      channel.on("postgres_changes", { event: "*", schema: "public", table }, scheduleRefresh);
+      channel.on("postgres_changes", { event: "*", schema: "public", table }, (payload) => queueChange(table, payload));
     }
     channel.subscribe((status) => {
       setRealtimeConnected(status === "SUBSCRIBED");
+      if (status === "SUBSCRIBED") {
+        if (hasConnectedOnce) void refreshSnapshot();
+        hasConnectedOnce = true;
+      }
     });
     return () => {
       active = false;

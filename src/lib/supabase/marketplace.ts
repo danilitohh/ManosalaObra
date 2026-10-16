@@ -89,6 +89,87 @@ export async function loadMarketplaceRequestsPage(client: SupabaseClient, reques
   };
 }
 
+export async function loadMarketplaceRequestsByIds(client: SupabaseClient, requestIds: string[]) {
+  const ids = [...new Set(requestIds)].slice(0, RELATED_ROWS_LIMIT);
+  if (ids.length === 0) return [];
+  const { data, error } = await client.from("service_requests").select(REQUEST_COLUMNS).in("id", ids).order("created_at", { ascending: false });
+  if (error) throw error;
+  return mapRequestRows(client, (data ?? []) as DatabaseRow[]);
+}
+
+export async function loadMarketplaceTechniciansByIds(client: SupabaseClient, technicianIds: string[]) {
+  const ids = [...new Set(technicianIds)].slice(0, RELATED_ROWS_LIMIT);
+  if (ids.length === 0) return [];
+  const { data, error } = await client.from("profiles")
+    .select("id, display_name, role, rating, completed_services, verified, is_available")
+    .in("id", ids);
+  if (error) throw error;
+  return ((data ?? []) as DatabaseRow[]).map(profileToUser);
+}
+
+export async function loadMarketplaceOffersByIds(client: SupabaseClient, offerIds: string[]) {
+  const ids = [...new Set(offerIds)].slice(0, RELATED_ROWS_LIMIT);
+  if (ids.length === 0) return [];
+  const { data, error } = await client.from("offers")
+    .select("id, request_id, technician_id, price_cop, message, status, created_at")
+    .in("id", ids)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  const rows = (data ?? []) as DatabaseRow[];
+  const technicians = await loadMarketplaceTechniciansByIds(client, rows.map((row) => String(row.technician_id)));
+  const technicianById = new Map(technicians.map((technician) => [technician.id, technician]));
+  return rows.map((row): Offer => ({
+    id: String(row.id),
+    requestId: String(row.request_id),
+    technicianId: String(row.technician_id),
+    price: Number(row.price_cop),
+    message: String(row.message ?? ""),
+    status: String(row.status) as Offer["status"],
+    createdAt: timestampLabel(row.created_at),
+    technician: technicianById.get(String(row.technician_id)),
+  }));
+}
+
+export async function loadMarketplaceServicesByIds(client: SupabaseClient, serviceIds: string[]) {
+  const ids = [...new Set(serviceIds)].slice(0, RELATED_ROWS_LIMIT);
+  if (ids.length === 0) return [];
+  const { data, error } = await client.from("services")
+    .select("id, request_id, client_id, technician_id, agreed_price_cop, commission_cop, payment_method, status, address_revealed, completion_confirmations, created_at")
+    .in("id", ids)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return ((data ?? []) as DatabaseRow[]).map((row): Service => ({
+    id: String(row.id),
+    requestId: String(row.request_id),
+    clientId: String(row.client_id),
+    technicianId: String(row.technician_id),
+    agreedPrice: Number(row.agreed_price_cop),
+    commission: Number(row.commission_cop),
+    paymentMethod: row.payment_method === "digital" ? "digital" : "cash",
+    status: String(row.status) as Service["status"],
+    addressRevealed: Boolean(row.address_revealed),
+    completionConfirmations: Array.isArray(row.completion_confirmations) ? row.completion_confirmations as Service["completionConfirmations"] : [],
+    createdAt: timestampLabel(row.created_at),
+  }));
+}
+
+export async function loadMarketplaceTransactionsByIds(client: SupabaseClient, transactionIds: string[]) {
+  const ids = [...new Set(transactionIds)].slice(0, RELATED_ROWS_LIMIT);
+  if (ids.length === 0) return [];
+  const { data, error } = await client.from("wallet_transactions")
+    .select("id, type, amount_cop, description, created_at")
+    .in("id", ids)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return ((data ?? []) as DatabaseRow[]).map((row): WalletTransaction => ({
+    id: String(row.id),
+    type: String(row.type) as WalletTransaction["type"],
+    amount: Number(row.amount_cop),
+    description: String(row.description),
+    createdAt: timestampLabel(row.created_at),
+  }));
+}
+
 export async function loadMarketplaceState(client: SupabaseClient, requestPage = 0): Promise<MarketplaceState & { technicians: User[]; requestPage: number; hasMoreRequests: boolean }> {
   const safePage = Math.max(0, Math.floor(requestPage));
   const from = safePage * REQUESTS_PER_PAGE;

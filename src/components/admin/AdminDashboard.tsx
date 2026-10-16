@@ -8,6 +8,7 @@ import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/c
 type AdminProfile = { id: string; display_name: string; role: string; rating: number; verified: boolean; is_available: boolean; created_at: string };
 type AdminRequest = { id: string; title: string; category: string; sector: string; budget_cop: number; status: string; payment_method: string; created_at: string };
 type AdminData = { profiles: AdminProfile[]; requests: AdminRequest[]; totalProfiles: number; totalRequests: number; activeRequests: number; activeServices: number; availableTechnicians: number };
+type AdminRefreshTarget = "profiles" | "requests" | "services";
 
 const PAGE_SIZE = 8;
 const EMPTY_DATA: AdminData = { profiles: [], requests: [], totalProfiles: 0, totalRequests: 0, activeRequests: 0, activeServices: 0, availableTechnicians: 0 };
@@ -41,7 +42,7 @@ export function AdminDashboard() {
   const [data, setData] = useState<AdminData>(EMPTY_DATA);
   const [profilePage, setProfilePage] = useState(0);
   const [requestPage, setRequestPage] = useState(0);
-  const refreshRef = useRef<() => Promise<void>>(async () => {});
+  const refreshRef = useRef<(targets?: AdminRefreshTarget[]) => Promise<void>>(async () => {});
 
   useEffect(() => {
     if (!supabase) return;
@@ -78,51 +79,65 @@ export function AdminDashboard() {
     return () => { active = false; };
   }, [router, supabase, userId]);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (targets?: AdminRefreshTarget[]) => {
     if (!supabase || role !== "admin") return;
-    setLoading(true);
+    const requested = new Set(targets ?? ["profiles", "requests", "services"]);
+    const includeProfiles = requested.has("profiles");
+    const includeRequests = requested.has("requests");
+    const includeServices = requested.has("services");
+    if (includeProfiles || includeRequests) setLoading(true);
     const [profileResult, requestResult, activeRequestResult, activeServiceResult, availableTechnicianResult] = await Promise.all([
-      supabase.from("profiles").select("id, display_name, role, rating, verified, is_available, created_at", { count: "exact" }).order("created_at", { ascending: false }).order("id", { ascending: false }).range(profilePage * PAGE_SIZE, profilePage * PAGE_SIZE + PAGE_SIZE - 1),
-      supabase.from("service_requests").select("id, title, category, sector, budget_cop, status, payment_method, created_at", { count: "exact" }).order("created_at", { ascending: false }).order("id", { ascending: false }).range(requestPage * PAGE_SIZE, requestPage * PAGE_SIZE + PAGE_SIZE - 1),
-      supabase.from("service_requests").select("id", { count: "exact", head: true }).in("status", ["published", "awaiting_balance"]),
-      supabase.from("services").select("id", { count: "exact", head: true }).neq("status", "completed").neq("status", "cancelled"),
-      supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "technician").eq("is_available", true),
+      includeProfiles ? supabase.from("profiles").select("id, display_name, role, rating, verified, is_available, created_at", { count: "exact" }).order("created_at", { ascending: false }).order("id", { ascending: false }).range(profilePage * PAGE_SIZE, profilePage * PAGE_SIZE + PAGE_SIZE - 1) : Promise.resolve(null),
+      includeRequests ? supabase.from("service_requests").select("id, title, category, sector, budget_cop, status, payment_method, created_at", { count: "exact" }).order("created_at", { ascending: false }).order("id", { ascending: false }).range(requestPage * PAGE_SIZE, requestPage * PAGE_SIZE + PAGE_SIZE - 1) : Promise.resolve(null),
+      includeRequests ? supabase.from("service_requests").select("id", { count: "exact", head: true }).in("status", ["published", "awaiting_balance"]) : Promise.resolve(null),
+      includeServices ? supabase.from("services").select("id", { count: "exact", head: true }).neq("status", "completed").neq("status", "cancelled") : Promise.resolve(null),
+      includeProfiles ? supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "technician").eq("is_available", true) : Promise.resolve(null),
     ]);
-    const queryError = profileResult.error ?? requestResult.error ?? activeRequestResult.error ?? activeServiceResult.error ?? availableTechnicianResult.error;
+    const queryError = profileResult?.error ?? requestResult?.error ?? activeRequestResult?.error ?? activeServiceResult?.error ?? availableTechnicianResult?.error;
     if (queryError) setError(queryError.message);
     else {
       setError("");
-      setData({
-        profiles: (profileResult.data ?? []) as AdminProfile[],
-        requests: (requestResult.data ?? []) as AdminRequest[],
-        totalProfiles: profileResult.count ?? 0,
-        totalRequests: requestResult.count ?? 0,
-        activeRequests: activeRequestResult.count ?? 0,
-        activeServices: activeServiceResult.count ?? 0,
-        availableTechnicians: availableTechnicianResult.count ?? 0,
-      });
+      setData((current) => ({
+        ...current,
+        ...(profileResult && { profiles: (profileResult.data ?? []) as AdminProfile[], totalProfiles: profileResult.count ?? 0 }),
+        ...(requestResult && { requests: (requestResult.data ?? []) as AdminRequest[], totalRequests: requestResult.count ?? 0 }),
+        ...(activeRequestResult && { activeRequests: activeRequestResult.count ?? 0 }),
+        ...(activeServiceResult && { activeServices: activeServiceResult.count ?? 0 }),
+        ...(availableTechnicianResult && { availableTechnicians: availableTechnicianResult.count ?? 0 }),
+      }));
     }
-    setLoading(false);
+    if (includeProfiles || includeRequests) setLoading(false);
   }, [profilePage, requestPage, role, supabase]);
   useEffect(() => { refreshRef.current = refresh; }, [refresh]);
 
   useEffect(() => {
-    if (role === "admin") void Promise.resolve().then(refresh);
+    if (role === "admin") void Promise.resolve().then(() => refresh());
   }, [refresh, role]);
 
   useEffect(() => {
     if (!supabase || role !== "admin") return;
     let refreshTimer: number | undefined;
-    const scheduleRefresh = () => {
+    const pendingTargets = new Set<AdminRefreshTarget>();
+    const scheduleRefresh = (target: AdminRefreshTarget) => {
+      pendingTargets.add(target);
       window.clearTimeout(refreshTimer);
-      refreshTimer = window.setTimeout(() => { void refreshRef.current(); }, 300);
+      refreshTimer = window.setTimeout(() => {
+        const targets = [...pendingTargets];
+        pendingTargets.clear();
+        void refreshRef.current(targets);
+      }, 300);
     };
+    let hasConnectedOnce = false;
     const channel = supabase.channel("admin-dashboard")
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, scheduleRefresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "service_requests" }, scheduleRefresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "services" }, scheduleRefresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "offers" }, scheduleRefresh)
-      .subscribe();
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => scheduleRefresh("profiles"))
+      .on("postgres_changes", { event: "*", schema: "public", table: "service_requests" }, () => scheduleRefresh("requests"))
+      .on("postgres_changes", { event: "*", schema: "public", table: "services" }, () => scheduleRefresh("services"))
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          if (hasConnectedOnce) void refreshRef.current();
+          hasConnectedOnce = true;
+        }
+      });
     return () => {
       window.clearTimeout(refreshTimer);
       void supabase.removeChannel(channel);
