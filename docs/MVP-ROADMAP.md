@@ -26,7 +26,7 @@ src/
     └── marketplace.ts                   Tipos, datos demo y reglas de negocio
 ```
 
-La interfaz no calcula reglas financieras por su cuenta: las reglas principales viven en `src/lib/marketplace.ts`. Esto permite reemplazar la persistencia local por una base de datos sin cambiar el contrato de la interfaz.
+La interfaz presenta importes y estados; las operaciones transaccionales y las reglas de comisión se aplican en las funciones SQL de Supabase. `src/lib/marketplace.ts` aporta tipos, formato y cálculos de presentación, no es la autoridad del saldo.
 
 ## Reglas de negocio implementadas
 
@@ -40,38 +40,32 @@ La interfaz no calcula reglas financieras por su cuenta: las reglas principales 
 
 ## Estado actual
 
-### Implementado en modo demo local
+### Implementado en el MVP actual
 
-- Vista de técnico y vista de cliente.
-- Publicación real de solicitudes desde un formulario.
-- Filtros por categoría.
-- Ofertas y contraofertas.
-- Comparación de ofertas.
-- Selección de técnico.
-- Cálculo de comisión y pago neto del técnico.
-- Saldo prepago y movimientos.
-- Recarga demo.
-- Cancelación y reversión de comisión.
-- Persistencia con `localStorage`.
-- Navegación por radar, servicios, mensajes, saldo, solicitudes y pagos.
+- Vistas separadas de técnico, cliente y administración con rutas independientes.
+- Supabase Auth, perfiles de rol y Postgres con RLS.
+- Publicación, propuestas, selección, avance, cancelación y reversión de comisión mediante operaciones controladas en la base.
+- Storage privado para imágenes y sincronización Realtime.
+- Listas principales con paginación y carga de campos limitados.
+- Radar con geolocalización del navegador opcional y selección manual de sector.
+- El saldo y el pago digital no procesan dinero real; recargas/pagos están deshabilitados o etiquetados como simulación.
+- No se encontró persistencia de solicitudes/servicios en `localStorage`; la sesión de Supabase sí es persistente en el navegador.
 
-### Próxima capa: backend real
+### Pendiente para robustecer backend y operación
 
-1. Autenticación y autorización por rol.
-2. PostgreSQL y una capa de acceso a datos en servidor.
-3. Tablas para usuarios, solicitudes, ofertas, servicios, saldos, movimientos y calificaciones.
-4. Route Handlers o Server Actions con validación de sesión en cada mutación.
-5. Almacenamiento privado para fotos y videos.
-6. Geolocalización real y filtro por radio de 5 km.
+1. Probar la migración de endurecimiento reciente y las pruebas pgTAP en staging.
+2. Revisar el modelo de sesión; actualmente la app es client-side y Supabase persiste la sesión en almacenamiento del navegador.
+3. Completar verificación operativa de técnicos antes de tratar la insignia como certificación efectiva.
+4. Validar radio de 5 km con ubicaciones reales; por privacidad, el backend publica solo el sector general.
 
 ### Capa de operación y dinero
 
-1. Validación administrativa de técnicos y certificaciones.
-2. Integración con proveedor de pagos compatible con PSE y Nequi.
-3. Webhooks idempotentes para recargas y pagos.
-4. Ledger inmutable para el saldo prepago.
-5. Pago digital del 90% al técnico después de la confirmación del proveedor.
-6. Registro de auditoría para asignaciones, cancelaciones y reversos.
+1. Definir e implementar validación administrativa de técnicos y certificaciones.
+2. Elegir proveedor compatible con PSE/Nequi y probar en sandbox.
+3. Diseñar webhooks idempotentes, conciliación, reembolsos y dispersión de fondos.
+4. Revisar el ledger de saldos para recargas reales, idempotencia y auditoría.
+5. Pagar al técnico solo tras confirmación verificable del proveedor.
+6. Completar auditoría de asignaciones, cancelaciones y reversos.
 
 ### Capa de producto
 
@@ -83,4 +77,4 @@ La interfaz no calcula reglas financieras por su cuenta: las reglas principales 
 
 ## Criterio para pasar a producción
 
-El MVP no debe conectarse a dinero real hasta que existan autenticación, autorización de servidor, persistencia transaccional, webhooks verificados y un proveedor de pagos seleccionado. `localStorage` es únicamente para validar experiencia y flujo de producto.
+No habilitar dinero real hasta probar autorización y migraciones en staging, definir recargas/reembolsos, elegir proveedor, verificar webhooks y conciliar pagos. Completar además textos legales con datos reales del operador y una revisión jurídica local.

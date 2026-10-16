@@ -2,13 +2,24 @@
 
 La integración usa Supabase Auth, Postgres, Storage privado y Supabase Realtime. La interfaz no utiliza `localStorage` para compartir solicitudes, ofertas, servicios ni saldos.
 
-## 1. Aplicar el esquema
+## 1. Probar primero en local
 
-En el proyecto correcto de Supabase, abre **SQL Editor**, pega y ejecuta el contenido de [`supabase/migrations/20261013000000_marketplace_realtime.sql`](../supabase/migrations/20261013000000_marketplace_realtime.sql). La migración crea las tablas, políticas RLS, funciones transaccionales, el bucket privado de fotos y habilita las tablas públicas necesarias en la publicación `supabase_realtime`.
+Instala y arranca Docker Desktop, después ejecuta desde la raíz:
+
+```bash
+npm run db:start
+npm run test:db
+```
+
+Esto usa `supabase/config.toml`, aplica las migraciones en la base local y ejecuta pgTAP. Si falla, resuelve los errores antes de aplicar cambios fuera del entorno local.
+
+## 2. Aplicar el esquema
+
+Las migraciones están ordenadas por fecha: marketplace/Realtime, rol admin y endurecimiento de seguridad. Para una base nueva se deben aplicar en ese orden. En la base ya existente, no vuelvas a ejecutar a ciegas la migración inicial ni la de admin: revisa la versión aplicada y aplica solo la pendiente después de validar localmente. La migración más reciente revoca inserciones directas en tres tablas y exige que solicitudes se creen con la RPC validada.
 
 No crees una política pública general ni desactives RLS. La dirección exacta está separada de la solicitud y solo la puede consultar el cliente propietario y el técnico asignado.
 
-## 2. Crear la cuenta de administrador propietario
+## 3. Crear la cuenta de administrador propietario
 
 1. Registra tu cuenta desde el acceso común como cliente o técnico y confirma el correo.
 2. Ejecuta [`20261014000000_admin_role.sql`](../supabase/migrations/20261014000000_admin_role.sql) en el SQL Editor. Esta migración permite el rol `admin`, actualiza RLS y mantiene la asignación fuera del registro público.
@@ -25,7 +36,7 @@ returning p.id, p.display_name, p.role;
 
 Debe devolver una fila con `role = admin`. Si no devuelve filas, primero registra esa cuenta y confirma el correo. Después inicia sesión de nuevo: el acceso único te enviará a `/admin`. No agregues `admin` a las opciones públicas de registro ni asignes el rol desde el navegador.
 
-## 3. Configurar Auth
+## 4. Configurar Auth
 
 En **Authentication → URL Configuration**, agrega como redirect URLs:
 
@@ -38,7 +49,7 @@ En **Authentication → URL Configuration**, agrega como redirect URLs:
 
 El registro crea cuentas de cliente o técnico según el espacio desde el que se registren. Si Supabase solicita confirmación por correo, confirma el correo y después inicia sesión.
 
-## 4. Configurar variables
+## 5. Configurar variables
 
 Copia `.env.example` a `.env.local` y completa:
 
@@ -47,7 +58,7 @@ Copia `.env.example` a `.env.local` y completa:
 
 Agrega esas mismas dos variables a los entornos **Production**, **Preview** y **Development** del proyecto de Vercel y vuelve a desplegar. Nunca uses `service_role`/secret key en variables `NEXT_PUBLIC_*` ni la compartas en el chat.
 
-## 5. Probar Realtime
+## 6. Probar Realtime
 
 1. Ejecuta `npm run dev` y abre `/cliente` y `/tecnico` en dos perfiles de navegador diferentes.
 2. Registra y confirma una cuenta para cada rol.

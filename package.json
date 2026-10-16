@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:start": "npx --yes supabase@2.121.0 start",
+    "test:db": "npx --yes supabase@2.121.0 test db"
   },
   "dependencies": {
     "@heroui/react": "^3.2.6",

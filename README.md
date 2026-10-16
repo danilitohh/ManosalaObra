@@ -18,6 +18,17 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Supabase local y pruebas de base de datos
+
+Requiere Docker Desktop en ejecución. El esquema local está en `supabase/` y usa PostgreSQL 17 como el proyecto conectado.
+
+```bash
+npm run db:start
+npm run test:db
+```
+
+La primera orden arranca el stack local y aplica las migraciones a una base local; la segunda ejecuta las pruebas pgTAP en `supabase/tests/`. No enlaza ni modifica la base de producción.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
